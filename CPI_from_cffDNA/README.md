@@ -71,6 +71,7 @@ Rscript cfDNA_CPI_estimator.R \
   --father_prefix Father \
   --cutoff_map examples/inputs/DNPpanel.txt \
   --popfreq examples/inputs/pop_allFreq.txt
+  --err_const
 ```
 
 ---
@@ -97,18 +98,33 @@ If omitted, the script runs in **ALL mode** → uses *all positions in the pileu
 
 ## Output
 
-  1) **Summary_FetalFraction_CPI**:
-      - N_sites_mother            : number of maternal informative loci
-      - N_sites_father            : paternal informative loci after merge
-      - Median_fetal_fraction     : site-level median (per cutoff if provided)
-      - Max_logCPI                : maximum log10(CPI) among iterations
-      - Min_logCPI                : minimum log10(CPI)
-      - Median_logCPI             : median log10(CPI)
-      - CPI_medianFF              : log10(CPI) evaluated at the median fetal-read threshold
+1) ***`Summary_FetalFraction_CPI.xlsx`***
 
-  2) **PDF plots**  (saved under: outputs/plots/):
-      - One PDF per pair          : log10(CPI) curve across fetal-read thresholds
-      - All_CPIplots              : all pairs stacked in a single multi-panel PDF
+Contains one row per mother–father pair (and **per cutoff panel**, if multiple are provided):
+
+| Column               | Meaning |
+|----------------------|---------|
+| **N_sites_mother**      | maternal-informative loci retained |
+| **N_sites_father**      | loci also informative in the father (after merge) |
+| **Median_fetal_fraction** | site-level median fetal fraction within the panel |
+| **Max_logCPI**          | highest log10(CPI) over all thresholds |
+| **Min_logCPI**          | lowest  log10(CPI) over all thresholds |
+| **Median_logCPI**       | median log10(CPI) over thresholds |
+| **CPI_medianFF**        | log10(CPI) computed at the median fetal-read threshold |
+
+
+If `--cutoff_map` includes more than one list, the table will contain **one block of rows per cutoff label** (integrating all specified panels).
+
+---
+
+2) ***`PDF plots`*** (saved under `outputs/plots/`)
+
+- **One PDF per pair** — log10(CPI) curve across increasing fetal-read thresholds  
+  *(one curve per cutoff if multiple lists were given)*
+
+- **All_CPIplots.pdf** — all pairs stacked in a single multi-panel PDF  
+  *(again, integrates all cutoff panels if multiple were supplied)*
+
 
 
 
