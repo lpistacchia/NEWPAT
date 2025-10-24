@@ -56,7 +56,7 @@ The script computes:
 
 ## **Usage**
 
-Run on a **single pileup file** (specify an output directory):
+Run on a **single pileup file**:
 
 ```bash
 Rscript compute_error_rate.R \
