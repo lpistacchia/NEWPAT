@@ -24,8 +24,6 @@ SNPcall/
 
 This clearly shows where to place your input files and where the outputs will be stored.
 
----
-
 ## **Software required**
 
 - **samtools** ≥ 1.18 (for pileup generation)  
@@ -36,8 +34,6 @@ This clearly shows where to place your input files and where the outputs will be
 
 > All required R packages must be installed before running.
 
----
-
 ## **Installation**
 
 No installation is required. Just download/clone the repository and move into the directory:
@@ -46,7 +42,6 @@ No installation is required. Just download/clone the repository and move into th
 git clone https://github.com/lpistacchia/NEWPAT.git
 cd NEWPAT/SNPcall
 ```
----
 
 ## **Usage**
 
@@ -56,8 +51,6 @@ Run SNPcall from the command line:
 Rscript SNPcall.R --pileup <pileup_file> --snplist <snp_list_file> --out <output_file>
 ```
 
----
-
 ## **Arguments**
 
 | **Flag**    | **Description**                                         |
@@ -65,8 +58,6 @@ Rscript SNPcall.R --pileup <pileup_file> --snplist <snp_list_file> --out <output
 | `--pileup`  | Path to the `samtools` pileup file                      |
 | `--snplist` | Path to the SNP list file (**pos**, **ref**, **alt**)   |
 | `--out`     | Desired output filename (default: `SNPcall_output.txt`) |
-
----
 
 ## **Examples**
 
@@ -78,8 +69,6 @@ Rscript SNPcall.R \
   --snplist examples/SNPlist.txt \
   --out examples/output.txt
 ```
-
----
 
 ## **Output Table**
 
@@ -94,8 +83,6 @@ Rscript SNPcall.R \
 | **N_Altro**       | Count of other reads                                           |
 | **total_count**   | Total reads covering the SNP                                   |
 | **ratio**         | Ratio of reference reads over total of reference + alternative |
-
----
 
 ## **Notes**
 
