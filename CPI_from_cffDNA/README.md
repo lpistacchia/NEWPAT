@@ -49,8 +49,7 @@ All required R packages must be installed before running the script.
 
 ## Installation
 
-No installation is required.  
-Clone this repository and move into the module directory:
+No installation is required. Just download the repository and move into the directory:
 
 ```bash
 git clone https://github.com/lpistacchia/NEWPAT.git
@@ -73,6 +72,7 @@ Rscript cfDNA_CPI_estimator.R \
   --popfreq examples/inputs/pop_allFreq.txt
 ```
 
+---
 
 `--err_const` — default mismatch penalty in CPI  
 Constant used in the CPI formula when an *incompatible paternal genotype* is observed at an informative DNP site.  
@@ -82,7 +82,7 @@ Constant used in the CPI formula when an *incompatible paternal genotype* is obs
 
 Since it enters the PI at *mismatching loci*, it directly affects the CPI distribution.
 
-
+---
 
 `--cutoff_map` — controls which DNPs are used  
 Allows restricting computation to a specific DNP panel rather than using all pileup sites.  
