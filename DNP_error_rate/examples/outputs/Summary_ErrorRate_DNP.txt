@@ -1,0 +1,2 @@
+mean_error_rate1	sd_error_rate1	mean_error_rate2	sd_error_rate2	mean_double_error_rate	sd_double_error_rate
+0.000577029316662911	0.000399270817791571	0.00124430041077876	0.000738332450330764	0	0
