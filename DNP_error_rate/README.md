@@ -3,8 +3,6 @@
 DNP Error Rate is a post–processing module designed to estimate the **sequencing error rate** on Double Nucleotide Polymorphisms (DNPs) using `samtools mpileup` and a reference DNP list.  
 It assumes that the pileup is generated exactly as required for **DNPcall** and does not process BAM files itself.
 
----
-
 ## **Reference**
 
 **Letizia Pistacchia, Francesco Ravasini, Elisa Bella, Eugenia D’Atanasio, Fulvio Cruciani, Beniamino Trombetta**  
@@ -24,8 +22,6 @@ https://doi.org/10.1093/bioadv/vbaf209
 
 > All these packages are required by the script and must be installed before running.
 
----
-
 ## **Installation**
 
 No installation is required. Just download the repository and move into the directory:
@@ -34,8 +30,6 @@ No installation is required. Just download the repository and move into the dire
 git clone https://github.com/lpistacchia/NEWPAT.git
 cd NEWPAT/DNP_error_rate
 ```
-
----
 
 ## **Input requirements**
 
@@ -52,8 +46,6 @@ The script computes:
 - **single–base error rate** (for each base composing the DNP)
 - **overall DNP-level error rate**
 
----
-
 ## **Usage**
 
 Run on a **single pileup file**:
@@ -64,8 +56,6 @@ Rscript compute_error_rate.R \
   --dnp_list path/to/DNP_list.txt \
   --output path/to/output_directory
 ```
-
----
 
 ## **Arguments**
 
@@ -83,16 +73,12 @@ Rscript compute_error_rate.R \
 - **`Summary_ErrorRate_DNPs_<sample>.txt`**  
   Mean and standard deviation of error rates across all DNPs
 
----
-
 ## **Notes**
 
 - The script does **not** generate pileup files  
 - Pileup must follow **DNPcall specification** and include **flanking bases**  
 - Only listed DNPs are evaluated  
 - Indels and inconsistent genotypes are filtered internally
-
----
 
 ## **Contact**
 
