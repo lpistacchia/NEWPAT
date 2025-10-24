@@ -20,7 +20,7 @@ https://doi.org/10.1093/bioadv/vbaf209
   - `tidyverse`
   - `readxl`
 
-> All these packages are required by the script and must be installed before running.
+All these packages are required by the script and must be installed before running.
 
 ## **Installation**
 
