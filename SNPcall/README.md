@@ -26,6 +26,28 @@ This clearly shows where to place your input files and where the outputs will be
 
 ---
 
+## **Software required**
+
+- **samtools** ≥ 1.18 (for pileup generation)  
+- **R** ≥ 4.2.0  
+- **R packages**:
+  - `optparse`
+  - `tidyverse`
+
+> All required R packages must be installed before running.
+
+---
+
+## **Installation**
+
+No installation is required. Just download/clone the repository and move into the directory:
+
+```bash
+git clone https://github.com/lpistacchia/NEWPAT.git
+cd NEWPAT/SNPcall
+```
+---
+
 ## **Usage**
 
 Run SNPcall from the command line:
