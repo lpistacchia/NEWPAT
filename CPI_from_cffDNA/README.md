@@ -1,4 +1,5 @@
-# NEWPAT — cfDNA fetal fraction and CPI distribution
+# NEWPAT 
+**cfDNA fetal fraction and CPI distribution**
 
 This module estimates the fetal fraction (on maternal-informative DNPs) and computes the CPI distribution across increasing fetal-read thresholds, starting from files produced in the DNPcall workflow (*i.e*., post–pileup per-site counts for mother and putative father). It generates per-pair CPI plots and a summary table.
 
