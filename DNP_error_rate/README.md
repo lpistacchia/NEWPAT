@@ -101,7 +101,7 @@ For questions or requests, please contact:
 Letizia Pistacchia 
 <letizia.pistacchia@uniroma1.it>
 
-## **Citation***
+## **Citation**
 If you use this module, please cite the original DNPcall paper:
 
 Letizia Pistacchia, Francesco Ravasini, Elisa Bella, Eugenia D’Atanasio, Fulvio Cruciani, Beniamino Trombetta
