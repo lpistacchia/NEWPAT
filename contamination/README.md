@@ -1,6 +1,6 @@
 # **Contamination Estimate**
 
-Contamination Estimate is a post–processing module designed to quantify potential sample contamination in the NIPAT workflow.  
+Contamination Estimate is a post-processing module designed to quantify potential sample contamination in the NIPAT workflow.  
 This module starts **from files produced in the DNPcall workflow**, which report per–position allele counts for all detected Double Nucleotide Polymorphisms (DNPs).
 It does not perform any read processing or variant calling: it operates exclusively on DNPcall output tables.
 
