@@ -33,7 +33,7 @@ contamination
 
 ## Software required
 
-- **R** ≥ 4.2.0  
+- **R** ≥ 4.4.2  
 - **R packages**:
   - dplyr ≥ 1.1.4
   - openxlsx ≥ 4.2.8
