@@ -35,7 +35,8 @@ contamination
 
 - **R** ≥ 4.2.0  
 - **R packages**:
-  - dplyr ≥ 1.1.4  
+  - dplyr ≥ 1.1.4
+  - openxlsx ≥ 4.2.8
   - tools  
 
 All required R packages must be installed before running the script.
