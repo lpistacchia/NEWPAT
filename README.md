@@ -11,9 +11,7 @@ If you use this repository, please cite:
 Pistacchia L, Ravasini F, Bella E, D’Atanasio E, Cruciani F, Trombetta B.
 
 *DNPcall: A New Pipeline for Accurate Double Nucleotide Polymorphism Calling.*
-
 Bioinformatics Advances. 2025; vbaf209.
-
 https://doi.org/10.1093/bioadv/vbaf209
 
 ## Repository Structure
