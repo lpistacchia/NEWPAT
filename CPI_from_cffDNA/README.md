@@ -43,7 +43,6 @@ CPI_from_cffDNA
   - ggplot2
   - patchwork
   - argparse
-  - openxlsx
 
 All required R packages must be installed before running the script.
 
