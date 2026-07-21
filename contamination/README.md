@@ -90,14 +90,16 @@ One file per sample, containing all **informative DNPs** used for contamination 
 
 Each row includes:
 
-- `chr`  
-- `pos1`  
-- `pos2`  
-- `N_REF`  
-- `N_ALT`  
-- `N_Other`  
-- `N_unexpected`  
-- `contamination`  
+- `chr`
+- `pos1`
+- `pos2`
+- `N_REF`
+- `N_ALT`
+- `N_Other`
+- `ratio_REF_ALT`
+- `ratio_Other`
+- `N_unexpected`
+- `contamination`
 
 Contamination is computed as:
 
@@ -113,7 +115,7 @@ Because part of `N_unexpected` may derive from sequencing errors, this value rep
 
 ### **2. `contamination_summary.xlsx`**
 
-An Excel file summarizing all processed samples.  
+A tab-delimited text file summarizing all processed samples.
 It contains, for each sample:
 
 - **sample name** 
