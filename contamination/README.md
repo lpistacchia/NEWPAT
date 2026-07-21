@@ -36,7 +36,6 @@ contamination
 - **R** ≥ 4.4.2  
 - **R packages**:
   - dplyr ≥ 1.1.4
-  - openxlsx ≥ 4.2.8
   - tools  
 
 All required R packages must be installed before running the script.
@@ -72,13 +71,13 @@ Rscript detect_contamination.R \
 
 ---
 
-Arguments must be provided in the exact order: 'DNPpanel.txt', 'input_path', 'output_dir'.
+Arguments must be provided in the following order: `DNPs`, `input_path`, `output_dir`.
 
-| Position | Argument             | Description                                                             |
-| -------- | -------------------- | ----------------------------------------------------------------------- |
-| **1**    | **`'DNPpanel.txt'`** | Path to the DNP panel file (`n°DNP`, `chr`, `pos1`, `pos2`).            |
-| **2**    | **`'input_path'`**   | Directory **or** single file containing DNPcall workflow output tables. |
-| **3**    | **`'output_dir'`**   | Directory where output files will be saved (automatically created).     |
+| Position | Argument | Description |
+|----------|----------|-------------|
+| **1** | **`DNPs`** | Path to the DNP list used as the `--DNPs` input for the DNPcall workflow. The file must contain the DNP coordinates (`chr`, `pos1`, `pos2`, `REF`, `ALT`) and may include or omit a header. |
+| **2** | **`input_path`** | Directory or single file containing DNPcall output tables. |
+| **3** | **`output_dir`** | Directory where output files will be written (created automatically if it does not exist). |
 
 
 ## Output
