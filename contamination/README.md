@@ -20,12 +20,12 @@ contamination
 ├── README.md
 └── examples
     ├── inputs
-    │   ├── full_output_sample1.txt
-    │   ├── full_output_sample2.txt
+    │   ├── full_output_S_Abkhasian-1.txt
+    │   ├── full_output_S_Basque-1.txt
     │   └── list_of_DNPs.txt
     └── outputs
-        ├── contamination_sample1.txt
-        ├── contamination_sample2.txt
+        ├── contamination_full_output_S_Abkhasian-1.txt
+        ├── contamination_full_output_S_Basque-1.txt
         └── contamination_summary.txt
 ```
 
@@ -113,7 +113,7 @@ Because part of `N_unexpected` may derive from sequencing errors, this value rep
 
 ---
 
-### **2. `contamination_summary.xlsx`**
+### **2. `contamination_summary.txt`**
 
 A tab-delimited text file summarizing all processed samples.
 It contains, for each sample:
