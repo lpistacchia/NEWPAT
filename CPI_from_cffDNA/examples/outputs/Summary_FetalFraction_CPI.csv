@@ -1,0 +1,3 @@
+"Pair","Cutoff","N_sites_mother","N_sites_father","Median_fetal_fraction_raw","Median_fetal_fraction_percent","Max_logCPI","Min_logCPI","Median_logCPI","Mean_logCPI","CPI_medianFF"
+"MotherID16_11-FatherID22_11_DNPs","NEWPAT/inputs/DNPpanel_845.txt",116,116,0.0293,2.93,38.471,-14.473,21.389,20.27,22.124
+"MotherID19_14-FatherID25_14_DNPs","NEWPAT/inputs/DNPpanel_845.txt",128,128,0.0383,3.83,-0.148,-270.302,-48.066,-78.112,-117.743
