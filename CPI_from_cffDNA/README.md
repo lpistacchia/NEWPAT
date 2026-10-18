@@ -105,10 +105,10 @@ Contains one row per mother–father pair (and **per cutoff panel**, if multiple
 | **N_sites_mother**      | maternal-informative loci retained |
 | **N_sites_father**      | loci also informative in the father (after merge) |
 | **Median_fetal_fraction** | site-level median fetal fraction within the panel |
-| **Max_logCPI**          | highest log10(CPI) over all thresholds |
-| **Min_logCPI**          | lowest  log10(CPI) over all thresholds |
-| **Median_logCPI**       | median log10(CPI) over thresholds |
-| **CPI_medianFF**        | log10(CPI) computed at the median fetal-read threshold |
+| **Max_logCPI**          | highest log₁₀(CPI) over all thresholds |
+| **Min_logCPI**          | lowest  log₁₀(CPI) over all thresholds |
+| **Median_logCPI**       | median log₁₀(CPI) over thresholds |
+| **CPI_medianFF**        | log₁₀(CPI) computed at the median fetal-read threshold |
 
 
 If `--cutoff_map` includes more than one list, the table will contain **one block of rows per cutoff label** (integrating all specified panels).
@@ -117,7 +117,7 @@ If `--cutoff_map` includes more than one list, the table will contain **one bloc
 
 2) ***`PDF plots`*** (saved under `outputs/plots/`)
 
-- **One PDF per pair** — log10(CPI) curve across increasing fetal-read thresholds  
+- **One PDF per pair** — log₁₀(CPI) curve across increasing fetal-read thresholds  
   *(one curve per cutoff if multiple lists were given)*
 
 - **All_CPIplots.pdf** — all pairs stacked in a single multi-panel PDF  
