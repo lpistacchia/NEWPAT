@@ -27,7 +27,8 @@ cd NEWPAT/SNPcall
 - **Indexed reference FASTA.** Use the same genome build and chromosome names
   as in the BAM files and SNP list.
 
-Example SNP list:
+The [example SNP list](examples/inputs/SNPs_list.txt) contains 15 SNPs.
+The first two entries are shown below.
 
 ```tsv
 chr	pos	ref	alt
@@ -44,6 +45,10 @@ Rscript SNPcall_unified.R \
   --reference=path/to/reference.fa \
   --out=results_SNP
 ```
+
+Replace `sample.bam` in [`examples/inputs/bamlist.txt`](examples/inputs/bamlist.txt)
+with the full path to your BAM file. Use one BAM path per line. Replace
+`path/to/reference.fa` with the path to your indexed reference FASTA.
 
 | Argument | Description |
 |---|---|
@@ -67,6 +72,14 @@ Add `--parallel --cores=2` to process samples with two workers.
 | `summary/resources.tsv` | Per-sample runtime and memory measurements |
 | `plots/` | Per-sample read-count and genotype plots |
 | `logs/` | Pileup generation and sample processing logs |
+
+### Example outputs
+
+The [example output table](examples/outputs/output_snpcall.txt) contains
+the results for the 15 SNPs in the example panel.
+
+- [Read-count and genotype plots](examples/outputs/plots/example_sample)
+- [Unassigned genotypes plot](examples/outputs/summary/Unassigned_genotypes.pdf)
 
 ### Per-sample output columns
 
