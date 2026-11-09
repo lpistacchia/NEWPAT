@@ -39,7 +39,7 @@ chr1	103400491	G	A
 ## Usage
 
 ```bash
-Rscript SNPcall_unified.R \
+Rscript SNPcall_latest.R \
   --bamlist=examples/inputs/bamlist.txt \
   --SNPs=examples/inputs/SNPs_list.txt \
   --reference=path/to/reference.fa \
