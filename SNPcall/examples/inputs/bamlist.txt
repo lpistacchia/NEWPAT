@@ -1,1 +1,1 @@
-examples/inputs/bamlist.txt
+/path/to/sample.bam
