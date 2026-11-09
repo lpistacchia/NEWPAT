@@ -39,8 +39,8 @@ chr1	103400491	G	A
 
 ```bash
 Rscript SNPcall_unified.R \
-  --bamlist=bamlist.txt \
-  --SNPs=SNPs_list_chr_pos.tsv \
+  --bamlist=examples/inputs/bamlist.txt \
+  --SNPs=examples/inputs/SNPs_list.txt \
   --reference=path/to/reference.fa \
   --out=results_SNP
 ```
