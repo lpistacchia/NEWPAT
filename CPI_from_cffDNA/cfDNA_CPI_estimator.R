@@ -67,13 +67,94 @@ if (!is.null(args$cutoff_map) && nzchar(args$cutoff_map)) {
 }
 
 
-## check popfreq
+## Read coordinates from the frequency table and use them in every join.
 if (!file.exists(args$popfreq)) stop("popfreq file not found")
-PopFreqDNPs <- read.table(args$popfreq, header=TRUE, sep="\t", stringsAsFactors=FALSE)
+population <- read.table(args$popfreq, header=TRUE, sep="\t",
+                         stringsAsFactors=FALSE, check.names=FALSE,
+                         quote="", comment.char="")
 
-# converto virgole in punti nelle due colonne di frequenza
-PopFreqDNPs$Ref_f.pop <- as.numeric(gsub(",", ".", PopFreqDNPs$Ref_f.pop))
-PopFreqDNPs$Alt_f.pop <- as.numeric(gsub(",", ".", PopFreqDNPs$Alt_f.pop))
+marker_type <- function(x, label) {
+  has_snp <- "pos" %in% names(x)
+  has_dnp <- all(c("pos1", "pos2") %in% names(x))
+  if (has_snp == has_dnp) {
+    stop(label, ": use either pos for SNPs or pos1 and pos2 for DNPs")
+  }
+  if (has_snp) "SNP" else "DNP"
+}
+
+marker <- marker_type(population, "population frequencies")
+site_columns <- if (marker == "SNP") c("chr", "pos") else c("chr", "pos1", "pos2")
+message("Marker type: ", marker)
+
+site_key <- function(x) {
+  do.call(paste, c(unname(as.list(x[site_columns])), sep="\t"))
+}
+
+check_sites <- function(x, required, label) {
+  missing <- setdiff(required, names(x))
+  if (length(missing)) stop(label, ": missing columns ", paste(missing, collapse=", "))
+  if (anyNA(x[site_columns]) || anyDuplicated(site_key(x))) {
+    stop(label, ": missing or duplicate coordinates")
+  }
+}
+
+check_sites(population, c(site_columns, "Ref_f.pop", "Alt_f.pop"),
+            "population frequencies")
+population$chr <- as.character(population$chr)
+population$Ref_f.pop <- as.numeric(gsub(",", ".", population$Ref_f.pop))
+population$Alt_f.pop <- as.numeric(gsub(",", ".", population$Alt_f.pop))
+if (any(!is.finite(population$Ref_f.pop) | !is.finite(population$Alt_f.pop) |
+        population$Ref_f.pop <= 0 | population$Ref_f.pop > 1 |
+        population$Alt_f.pop <= 0 | population$Alt_f.pop > 1)) {
+  stop("Population frequencies must be finite and in (0, 1]")
+}
+
+# Keep allele columns outside the join to avoid REF and ALT suffix conflicts.
+PopFreqDNPs <- population[, c(site_columns, "Ref_f.pop", "Alt_f.pop"), drop=FALSE]
+
+read_calls <- function(path) {
+  x <- read.table(path, header=TRUE, check.names=FALSE, stringsAsFactors=FALSE)
+  if (marker_type(x, path) != marker) stop(path, ": format differs from population frequencies")
+  check_sites(x, c(site_columns, "REF", "ALT", "N_REF", "N_ALT", "N_Other", "total_count"), path)
+  x$chr <- as.character(x$chr)
+  expected_length <- if (marker == "SNP") 1L else 2L
+  if (anyNA(x[c("REF", "ALT")]) ||
+      any(nchar(x$REF) != expected_length | nchar(x$ALT) != expected_length |
+          toupper(x$REF) == toupper(x$ALT))) {
+    stop(path, ": invalid REF or ALT alleles")
+  }
+  # Older DNP frequency tables have no REF or ALT columns.
+  if (all(c("REF", "ALT") %in% names(population))) {
+    j <- match(site_key(x), site_key(population))
+    present <- which(!is.na(j))
+    if (anyNA(population[j[present], c("REF", "ALT"), drop=FALSE])) {
+      stop("Population frequencies contain missing alleles")
+    }
+    if (any(toupper(x$REF[present]) != toupper(population$REF[j[present]]) |
+            toupper(x$ALT[present]) != toupper(population$ALT[j[present]]))) {
+      stop(path, ": alleles differ from population frequencies")
+    }
+  }
+  x
+}
+
+check_pair <- function(mother, father) {
+  j <- match(site_key(mother), site_key(father))
+  present <- which(!is.na(j))
+  if (any(toupper(mother$REF[present]) != toupper(father$REF[j[present]]) |
+          toupper(mother$ALT[present]) != toupper(father$ALT[j[present]]))) {
+    stop("Mother and father have different REF or ALT alleles at shared coordinates")
+  }
+}
+
+read_cutoff <- function(path) {
+  if (is.na(path)) return(NULL)
+  x <- read.table(path, header=TRUE, sep="\t", stringsAsFactors=FALSE)
+  if (marker_type(x, path) != marker) stop(path, ": cutoff format differs from the calls")
+  check_sites(x, site_columns, path)
+  x$chr <- as.character(x$chr)
+  x
+}
 
 ## helper: compute fetal_reads on mother dataframe
 ## note: this mirrors the logic used in cpi iteration
@@ -91,8 +172,8 @@ compute_madre_info <- function(madre_df) {
 ## core: compute cpi for one list (or all sites if dnp_list is NULL)
 run_CPI_iteration <- function(madre_df, padre_df, dnp_list, cutoff_label, err_const) {
   if (!is.null(dnp_list)) {
-    madre <- madre_df %>% dplyr::semi_join(dnp_list, by=c("chr","pos1","pos2"))
-    padre <- padre_df %>% dplyr::semi_join(dnp_list, by=c("chr","pos1","pos2"))
+    madre <- madre_df %>% dplyr::semi_join(dnp_list, by=site_columns)
+    padre <- padre_df %>% dplyr::semi_join(dnp_list, by=site_columns)
   } else {
     madre <- madre_df
     padre <- padre_df
@@ -107,13 +188,13 @@ run_CPI_iteration <- function(madre_df, padre_df, dnp_list, cutoff_label, err_co
   for (i in 2:max_fetal) {
     madre_filt <- madre_info %>% dplyr::filter(fetal_reads >= i)
 
-    df_merged <- dplyr::inner_join(madre_filt, padre, by=c("chr","pos1","pos2")) %>%
+    df_merged <- dplyr::inner_join(madre_filt, padre, by=site_columns) %>%
       dplyr::mutate(threshold = dplyr::case_when(
         ratio_Ref_mother >= 0.9 & Alt_father >= 0 ~ "informative",
         ratio_Ref_mother <= 0.1 & Ref_father >= 0 ~ "informative",
         TRUE ~ "non informative"
       )) %>%
-      dplyr::inner_join(PopFreqDNPs, by=c("chr","pos1","pos2")) %>%
+      dplyr::inner_join(PopFreqDNPs, by=site_columns) %>%
       dplyr::mutate(dplyr::across(c(Ref_f.pop,Alt_f.pop), as.numeric))
 
     PI <- df_merged %>% dplyr::filter(threshold=="informative") %>%
@@ -262,20 +343,21 @@ all_combined_plots <- list()
 for (i in 1:nrow(coppie)) {
   mamma_id <- coppie$mamma[i]
   papa_id  <- coppie$papa[i]
-  pair_name <- paste0("Mother", mamma_id, "-Father", papa_id, "_DNPs")
+  pair_name <- paste0("Mother", mamma_id, "-Father", papa_id, "_", marker, "s")
 
   mother_path <- file.path(args$pileup_dir, paste0(args$mother_prefix, mamma_id, ".txt"))
   father_path <- file.path(args$pileup_dir, paste0(args$father_prefix, papa_id, ".txt"))
 
-  madre <- read.table(mother_path, header=TRUE, check.names=FALSE)
-  padre <- read.table(father_path, header=TRUE, check.names=FALSE)
+  madre <- read_calls(mother_path)
+  padre <- read_calls(father_path)
+  check_pair(madre, padre)
 
   madre$chr <- as.character(madre$chr)
   padre$chr <- as.character(padre$chr)
 
   madre <- madre %>%
     dplyr::transmute(
-      chr, pos1, pos2, REF, ALT,
+      dplyr::across(dplyr::all_of(site_columns)), REF, ALT,
       Ref_mother = N_REF,
       Alt_mother = N_ALT,
       Error_mother = N_Other,
@@ -285,7 +367,7 @@ for (i in 1:nrow(coppie)) {
 
   padre <- padre %>%
     dplyr::transmute(
-      chr, pos1, pos2, REF, ALT,
+      dplyr::across(dplyr::all_of(site_columns)), REF, ALT,
       Ref_father = N_REF,
       Alt_father = N_ALT,
       Error_father = N_Other,
@@ -306,7 +388,7 @@ for (i in 1:nrow(coppie)) {
 
   for (k in seq_len(nrow(cutoff_df))) {
     cutoff_label <- cutoff_df$Cutoff[k]
-    dnp_list <- if (!is.na(cutoff_df$Path[k])) read.table(cutoff_df$Path[k], header=TRUE, sep="\t", stringsAsFactors=FALSE) else NULL
+    dnp_list <- read_cutoff(cutoff_df$Path[k])
 
     out <- run_CPI_iteration(madre, padre, dnp_list, cutoff_label, err_const)
     res <- out$results
@@ -382,20 +464,21 @@ fetal_fraction_summary <- data.frame()
 for (i in 1:nrow(coppie)) {
   mamma_id <- coppie$mamma[i]
   papa_id  <- coppie$papa[i]
-  pair_name <- paste0("Mother", mamma_id, "-Father", papa_id, "_DNPs")
+  pair_name <- paste0("Mother", mamma_id, "-Father", papa_id, "_", marker, "s")
 
   mother_path <- file.path(args$pileup_dir, paste0(args$mother_prefix, mamma_id, ".txt"))
   father_path <- file.path(args$pileup_dir, paste0(args$father_prefix, papa_id, ".txt"))
 
-  madre <- read.table(mother_path, header=TRUE, check.names=FALSE)
-  padre <- read.table(father_path, header=TRUE, check.names=FALSE)
+  madre <- read_calls(mother_path)
+  padre <- read_calls(father_path)
+  check_pair(madre, padre)
 
 madre$chr <- as.character(madre$chr)
 padre$chr <- as.character(padre$chr)
 
 madre <- madre %>%
   dplyr::transmute(
-    chr, pos1, pos2, REF, ALT,
+    dplyr::across(dplyr::all_of(site_columns)), REF, ALT,
     Ref_mother = N_REF,
     Alt_mother = N_ALT,
     Error_mother = N_Other,
@@ -405,7 +488,7 @@ madre <- madre %>%
 
 padre <- padre %>%
   dplyr::transmute(
-    chr, pos1, pos2, REF, ALT,
+    dplyr::across(dplyr::all_of(site_columns)), REF, ALT,
     Ref_father = N_REF,
     Alt_father = N_ALT,
     Error_father = N_Other,
@@ -422,10 +505,10 @@ padre <- padre %>%
 
   for (k in seq_len(nrow(cutoff_df))) {
     cutoff_label <- cutoff_df$Cutoff[k]
-    dnp_list <- if (!is.na(cutoff_df$Path[k])) read.table(cutoff_df$Path[k], header=TRUE, sep="\t", stringsAsFactors=FALSE) else NULL
+    dnp_list <- read_cutoff(cutoff_df$Path[k])
 
-    madre_cutoff <- if (!is.null(dnp_list)) madre %>% semi_join(dnp_list, by=c("chr","pos1","pos2")) else madre
-    padre_cutoff <- if (!is.null(dnp_list)) padre %>% semi_join(dnp_list, by=c("chr","pos1","pos2")) else padre
+    madre_cutoff <- if (!is.null(dnp_list)) madre %>% semi_join(dnp_list, by=site_columns) else madre
+    padre_cutoff <- if (!is.null(dnp_list)) padre %>% semi_join(dnp_list, by=site_columns) else padre
 
     madre_cutoff <- madre_cutoff %>%
       mutate(
@@ -441,12 +524,12 @@ padre <- padre %>%
 
     ## recalc father informative count after merge
     if (!is.null(dnp_list)) {
-      padre_cut_tmp <- padre %>% semi_join(dnp_list, by=c("chr","pos1","pos2"))
+      padre_cut_tmp <- padre %>% semi_join(dnp_list, by=site_columns)
     } else {
       padre_cut_tmp <- padre
     }
 
-    df_merge_tmp <- inner_join(madre_cutoff, padre_cut_tmp, by=c("chr","pos1","pos2")) %>%
+    df_merge_tmp <- inner_join(madre_cutoff, padre_cut_tmp, by=site_columns) %>%
       mutate(threshold = case_when(
         ratio_Ref_mother >= 0.9 & Alt_father >= 0 ~ "informative",
         ratio_Ref_mother <= 0.1 & Ref_father >= 0 ~ "informative",
