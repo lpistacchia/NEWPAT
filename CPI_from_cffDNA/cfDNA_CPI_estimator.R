@@ -19,14 +19,18 @@ parser$add_argument("--pairs",         required=TRUE)
 parser$add_argument("--mother_prefix", required=TRUE)
 parser$add_argument("--father_prefix", required=TRUE)
 parser$add_argument("--popfreq",       required=TRUE)
+parser$add_argument("--markers",       required=TRUE,
+                    help="SNPcall or DNPcall marker list, including coordinates, REF and ALT")
 
-## optional cutoff and err_const
+## Optional panel filtering and marker-specific mismatch constants.
 parser$add_argument("--cutoff_map",    required=FALSE,
-                    help='optional mapping "0.3=/abs/fileA.xlsx,0.5=/abs/fileB.xlsx". if missing use ALL sites')
-parser$add_argument("--err_const",     default="0.0000892303778101497")
+                    help='optional subpanels "panel1=/abs/fileA.txt,panel2=/abs/fileB.txt"; defaults to the complete --markers list')
+parser$add_argument("--err_const_snp", default="0.001",
+                    help="SNP mismatch constant [default: %(default)s]")
+parser$add_argument("--err_const_dnp", default="0.0000892303778101497",
+                    help="DNP mismatch constant [default: %(default)s]")
 
 args <- parser$parse_args()
-err_const <- as.numeric(args$err_const)
 
 ## make output dirs
 if (!dir.exists(args$out_dir)) dir.create(args$out_dir, recursive = TRUE, showWarnings = FALSE)
@@ -82,9 +86,45 @@ marker_type <- function(x, label) {
   if (has_snp) "SNP" else "DNP"
 }
 
-marker <- marker_type(population, "population frequencies")
+# DNPcall lists have five columns without a header; SNPcall lists have four.
+# A header is also accepted, with lower- or upper-case allele column names.
+marker_list <- read.table(args$markers, header=FALSE, sep="", quote="",
+                          comment.char="", colClasses="character",
+                          stringsAsFactors=FALSE, check.names=FALSE)
+marker_columns <- switch(as.character(ncol(marker_list)),
+  "4" = c("chr", "pos", "REF", "ALT"),
+  "5" = c("chr", "pos1", "pos2", "REF", "ALT"),
+  stop("Marker list must contain four SNP columns or five DNP columns")
+)
+first_row <- unlist(marker_list[1, ], use.names=FALSE)
+if (identical(tolower(first_row), tolower(marker_columns))) {
+  marker_list <- marker_list[-1, , drop=FALSE]
+}
+names(marker_list) <- marker_columns
+if (!nrow(marker_list)) stop("Marker list is empty")
+marker <- marker_type(marker_list, "marker list")
+if (marker_type(population, "population frequencies") != marker) {
+  stop("Population frequency coordinates do not match the marker list format")
+}
 site_columns <- if (marker == "SNP") c("chr", "pos") else c("chr", "pos1", "pos2")
 message("Marker type: ", marker)
+
+# Select the constant for the detected marker type.
+read_error_constant <- function(value, option) {
+  if (is.null(value)) return(NULL)
+  number <- suppressWarnings(as.numeric(value))
+  if (length(number) != 1L || !is.finite(number) || number <= 0 || number > 1) {
+    stop(option, " must be a finite number in (0, 1], for example 1e-04")
+  }
+  number
+}
+
+error_constants <- list(
+  SNP = read_error_constant(args$err_const_snp, "--err_const_snp"),
+  DNP = read_error_constant(args$err_const_dnp, "--err_const_dnp")
+)
+err_const <- error_constants[[marker]]
+message("Mismatch constant used for ", marker, ": ", sprintf("%.17g", err_const))
 
 site_key <- function(x) {
   do.call(paste, c(unname(as.list(x[site_columns])), sep="\t"))
@@ -98,9 +138,43 @@ check_sites <- function(x, required, label) {
   }
 }
 
+check_sites(marker_list, marker_columns, "marker list")
+for (column in setdiff(site_columns, "chr")) {
+  position <- suppressWarnings(as.numeric(marker_list[[column]]))
+  if (any(!is.finite(position) | position < 1 | position != floor(position))) {
+    stop("Marker list positions must be positive integers")
+  }
+  marker_list[[column]] <- position
+}
+marker_list$REF <- toupper(marker_list$REF)
+marker_list$ALT <- toupper(marker_list$ALT)
+allele_pattern <- if (marker == "SNP") "^[ACGT]$" else "^[ACGT]{2}$"
+if (anyNA(marker_list[c("REF", "ALT")]) ||
+    any(!grepl(allele_pattern, marker_list$REF) |
+        !grepl(allele_pattern, marker_list$ALT) |
+        marker_list$REF == marker_list$ALT)) {
+  stop("Marker list must contain distinct REF and ALT alleles for the selected marker type")
+}
+# Check again after converting positions, so equivalent coordinates cannot repeat.
+check_sites(marker_list, marker_columns, "marker list")
+
 check_sites(population, c(site_columns, "Ref_f.pop", "Alt_f.pop"),
             "population frequencies")
 population$chr <- as.character(population$chr)
+frequency_index <- match(site_key(marker_list), site_key(population))
+if (anyNA(frequency_index)) {
+  missing_sites <- site_key(marker_list)[is.na(frequency_index)]
+  stop("Missing population frequencies for marker-list sites: ",
+       paste(head(missing_sites, 5), collapse=", "))
+}
+population <- population[frequency_index, , drop=FALSE]
+if (all(c("REF", "ALT") %in% names(population))) {
+  if (anyNA(population[c("REF", "ALT")]) ||
+      any(toupper(population$REF) != marker_list$REF |
+          toupper(population$ALT) != marker_list$ALT)) {
+    stop("Population frequency alleles differ from the marker list")
+  }
+}
 population$Ref_f.pop <- as.numeric(gsub(",", ".", population$Ref_f.pop))
 population$Alt_f.pop <- as.numeric(gsub(",", ".", population$Alt_f.pop))
 if (any(!is.finite(population$Ref_f.pop) | !is.finite(population$Alt_f.pop) |
@@ -117,6 +191,14 @@ read_calls <- function(path) {
   if (marker_type(x, path) != marker) stop(path, ": format differs from population frequencies")
   check_sites(x, c(site_columns, "REF", "ALT", "N_REF", "N_ALT", "N_Other", "total_count"), path)
   x$chr <- as.character(x$chr)
+  # Restrict all downstream calculations to the required marker list.
+  x <- x[site_key(x) %in% site_key(marker_list), , drop=FALSE]
+  j <- match(site_key(x), site_key(marker_list))
+  if (anyNA(x[c("REF", "ALT")]) ||
+      any(toupper(x$REF) != marker_list$REF[j] |
+          toupper(x$ALT) != marker_list$ALT[j])) {
+    stop(path, ": alleles differ from the marker list")
+  }
   expected_length <- if (marker == "SNP") 1L else 2L
   if (anyNA(x[c("REF", "ALT")]) ||
       any(nchar(x$REF) != expected_length | nchar(x$ALT) != expected_length |
@@ -583,6 +665,9 @@ padre <- padre %>%
     }
   }
 }
+
+# Record the constant actually used in every summary row.
+fetal_fraction_summary$Error_constant <- err_const
 
 write.csv(
   fetal_fraction_summary,
