@@ -301,7 +301,8 @@ closest_logCPI <- function(res_df, target_i) {
 
 plot_CPI <- function(df, pair_name,
                      cfDNA_percent = NA_real_,
-                     cpi_medff = NA_real_) {
+                     cpi_medff = NA_real_,
+                     median_reads = NA_real_) {
 
   if (nrow(df) == 0) {
     return(
@@ -309,6 +310,13 @@ plot_CPI <- function(df, pair_name,
         theme_void() +
         labs(title = paste(pair_name, "(no data)"))
     )
+  }
+
+  # Use the same nearest iteration as closest_logCPI().
+  median_threshold <- if (length(median_reads) == 1L && is.finite(median_reads)) {
+    df$Iteration[which.min(abs(df$Iteration - median_reads))]
+  } else {
+    numeric()
   }
 
   max_iter <- max(df$Iteration, na.rm = TRUE)
@@ -344,6 +352,9 @@ plot_CPI <- function(df, pair_name,
     annotate("rect", xmin = -Inf, xmax = Inf,
              ymin = 4, ymax = Inf, fill = "green", alpha = 0.05) +
 
+    geom_vline(xintercept = median_threshold, colour = "red",
+               linetype = "dashed", linewidth = 0.6,
+               show.legend = FALSE) +
     geom_line(aes(y = log_CPI), colour = "black") +
     geom_point(aes(y = log_CPI), colour = "black", size = 1.3) +
     geom_line(aes(y = NotMismatch), colour = "green") +
@@ -471,7 +482,8 @@ for (i in seq_len(nrow(coppie))) {
 
   plot <- plot_CPI(res, pair_name,
                    cfDNA_percent=100 * median_fetal_fraction,
-                   cpi_medff=cpi_at_med)
+                   cpi_medff=cpi_at_med,
+                   median_reads=target_i)
   ggsave(file.path(plots_dir, paste0(pair_name, "_CPIplot.pdf")),
          plot=plot, width=12, height=4)
   all_combined_plots[[pair_name]] <- plot
