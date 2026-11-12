@@ -1,8 +1,0 @@
-Marker type: SNP
-Mismatch constant: 0.001
-Minimum child reads: 2
-Site selection: both
-Quality filter: Other / total_count <= 0.10 in all samples
-Genotype ratios: REF homozygote >= 0.90; heterozygote 0.40–0.60; ALT homozygote <= 0.10
-CPI assumes independent biallelic markers and a known biological mother.
-Mismatch constants are empirical penalties, not calibrated mutation models.

@@ -1,3 +1,3 @@
 "Trio","Marker_type","Analysis","N_sites","N_heterozygous_child_sites","N_homozygous_child","Matching_sites","Mismatching_sites","Log10_CPI","CPI","Error_constant","Min_child_reads"
-"MotherM1-FatherF1-ChildC1_DNPs","DNP","heterozygous_child_sites",22,22,0,22,0,9.66253717170599,4597663387.14935,8.92303778101497e-05,2
-"MotherM1-FatherF1-ChildC1_DNPs","DNP","all_compatible_sites",166,22,144,166,0,14.0564939103117,113892181177298,8.92303778101497e-05,2
+"MotherM1-FatherF1-ChildC1_DNPs","DNP","heterozygous_child_sites",14,14,0,14,0,6.12751350937085,1341261.65667991,8.92303778101497e-05,2
+"MotherM1-FatherF1-ChildC1_DNPs","DNP","all_compatible_sites",121,14,107,121,0,8.41654048564533,260939896.413609,8.92303778101497e-05,2

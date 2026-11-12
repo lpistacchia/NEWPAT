@@ -257,7 +257,7 @@ prepare_sample <- function(id, prefix, role) {
     stop(path, ": read counts must be numeric")
   }
   # DNPcall can report NA total_count at sites with no reads.
-  # Correct this representation in memory and retain a flag in the audit.
+  # Correct this representation in memory and retain an internal flag.
   x$Missing_total_at_zero_coverage <- is.na(x$total_count) &
     !is.na(x$N_REF) & !is.na(x$N_ALT) & !is.na(x$N_Other) &
     x$N_REF == 0 & x$N_ALT == 0 & x$N_Other == 0
@@ -308,12 +308,10 @@ test <- site_pi(c("ALT", "ALT", "REF", "REF"),
 stopifnot(isTRUE(all.equal(test$PI, c(2.5, 1.25, 1/0.6, 0.001/0.6))),
           identical(test$Mismatch, c(FALSE, FALSE, FALSE, TRUE)))
 
-write_tsv <- function(x, path) {
-  write.table(x, path, sep="\t", quote=FALSE, row.names=FALSE, na="NA")
-}
-
 summary_rows <- list()
 all_plots <- list()
+plots_dir <- file.path(args$out_dir, "plots")
+dir.create(plots_dir, recursive=TRUE, showWarnings=FALSE)
 for (ids in trios) {
   trio_name <- paste0("Mother", ids[1], "-Father", ids[2], "-Child", ids[3],
                       "_", marker, "s")
@@ -376,19 +374,9 @@ for (ids in trios) {
     x$Mismatch[eligible] <- pi$Mismatch
     x$Paternal_transmission[eligible] <- pi$Transmission
   }
-  trio_dir <- file.path(args$out_dir, trio_name)
-  dir.create(trio_dir, recursive=TRUE)
-  write_tsv(x, file.path(trio_dir, "Site_audit.txt"))
-  write_tsv(x[x$Mother_child_incompatible &
-                x$Quality_pass_mother %in% TRUE & x$Quality_pass_child %in% TRUE, , drop=FALSE],
-            file.path(trio_dir, "Mother_child_incompatibilities.txt"))
-
   for (analysis in analyses) {
     retained <- select_sites(x, analysis)
     sites <- x[retained, , drop=FALSE]
-    dest <- file.path(trio_dir, analysis)
-    dir.create(dest)
-    write_tsv(sites, file.path(dest, "Informative_sites.txt"))
 
     # Sum logs directly to avoid numerical underflow of the product.
     log_cpi <- if (nrow(sites)) sum(log10(sites$Paternity_Index)) else NA_real_
@@ -476,34 +464,15 @@ for (ids in trios) {
       plot <- ggplot() + theme_void() +
         labs(title=paste(trio_name, analysis, "— no eligible sites"))
     }
-    write_tsv(curve, file.path(dest, "CPI_by_read_threshold.txt"))
-    ggsave(file.path(dest, "CPIplot.pdf"), plot, width=10, height=4)
+    ggsave(file.path(plots_dir, paste0(trio_name, "_", analysis, "_CPIplot.pdf")),
+           plot, width=10, height=4)
     all_plots[[length(all_plots) + 1L]] <- plot
   }
 }
 summary <- bind_rows(summary_rows)
 write.csv(summary, file.path(args$out_dir, "Summary_Postnatal_CPI.csv"), row.names=FALSE)
 
-# Explicit side-by-side comparison of the two site selections.
-a <- summary[summary$Analysis == "heterozygous_child_sites", ]
-b <- summary[summary$Analysis == "all_compatible_sites", ]
-a <- a[c("Trio", "Marker_type", "N_sites", "Log10_CPI")]
-b <- b[c("Trio", "Marker_type", "N_sites", "Log10_CPI")]
-names(a)[3:4] <- c("Sites_heterozygous_only", "Log10_CPI_heterozygous_only")
-names(b)[3:4] <- c("Sites_all_compatible", "Log10_CPI_all_compatible")
-comparison <- merge(a, b, by=c("Trio", "Marker_type"), all=TRUE, sort=FALSE)
-comparison$Delta_log10_CPI <- comparison$Log10_CPI_all_compatible -
-  comparison$Log10_CPI_heterozygous_only
-write.csv(comparison, file.path(args$out_dir, "Comparison_Postnatal_CPI.csv"), row.names=FALSE)
 pdf(file.path(args$out_dir, "All_CPIplots.pdf"), width=10, height=4)
 for (plot in all_plots) print(plot)
 dev.off()
-writeLines(c(paste("Marker type:", marker), paste("Mismatch constant:", err_const),
-             paste("Minimum child reads:", min_child_reads),
-             paste("Site selection:", args$site_selection),
-             "Quality filter: Other / total_count <= 0.10 in all samples",
-             "Genotype ratios: REF homozygote >= 0.90; heterozygote 0.40–0.60; ALT homozygote <= 0.10",
-             "CPI assumes independent biallelic markers and a known biological mother.",
-             "Mismatch constants are empirical penalties, not calibrated mutation models."),
-           file.path(args$out_dir, "Parameters.txt"))
-message("Done: postnatal summaries, site reports and plots saved.")
+message("Done: postnatal summary and PDF plots saved.")
