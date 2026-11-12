@@ -1,0 +1,3 @@
+"Trio","Marker_type","Analysis","N_sites","N_heterozygous_child_sites","N_homozygous_child","Matching_sites","Mismatching_sites","Log10_CPI","CPI","Error_constant","Min_child_reads"
+"MotherM1-FatherF1-ChildC1_SNPs","SNP","heterozygous_child_sites",22,22,0,22,0,8.6879390231308,487460043.748805,0.001,2
+"MotherM1-FatherF1-ChildC1_SNPs","SNP","all_compatible_sites",166,22,144,166,0,13.2848164159152,19267102859499,0.001,2
