@@ -309,7 +309,6 @@ stopifnot(isTRUE(all.equal(test$PI, c(2.5, 1.25, 1/0.6, 0.001/0.6))),
           identical(test$Mismatch, c(FALSE, FALSE, FALSE, TRUE)))
 
 summary_rows <- list()
-site_rows <- list()
 all_plots <- list()
 plots_dir <- file.path(args$out_dir, "plots")
 dir.create(plots_dir, recursive=TRUE, showWarnings=FALSE)
@@ -383,30 +382,6 @@ for (ids in trios) {
     x$Mismatch[eligible] <- pi$Mismatch
     x$Paternal_transmission[eligible] <- pi$Transmission
   }
-  # One row per site, including excluded sites and the reason.
-  x$Informative_heterozygous_child_sites <- select_sites(x, "heterozygous_child_sites")
-  x$Informative_all_compatible_sites <- select_sites(x, "all_compatible_sites")
-  x$Used_heterozygous_child_sites <- x$Informative_heterozygous_child_sites &
-    ("heterozygous_child_sites" %in% analyses)
-  x$Used_all_compatible_sites <- x$Informative_all_compatible_sites &
-    ("all_compatible_sites" %in% analyses)
-  x$Log10_PI <- log10(x$Paternity_Index)
-  x$Trio <- rep(trio_name, nrow(x))
-  x$Marker_type <- rep(marker, nrow(x))
-  columns <- c("Trio", "Marker_type", site_columns, "REF", "ALT",
-    "GT_mother", "GT_child", "GT_father",
-    "N_REF_mother", "N_ALT_mother", "N_Other_mother", "total_count_mother",
-    "N_REF_child", "N_ALT_child", "N_Other_child", "total_count_child",
-    "N_REF_father", "N_ALT_father", "N_Other_father", "total_count_father",
-    "Other_ratio_mother", "Other_ratio_child", "Other_ratio_father",
-    "Quality_pass_mother", "Quality_pass_child", "Quality_pass_father",
-    "Mother_child_incompatible", "Required_paternal_allele", "Child_support",
-    "Ref_f.pop", "Alt_f.pop", "Status",
-    "Informative_heterozygous_child_sites", "Informative_all_compatible_sites",
-    "Used_heterozygous_child_sites", "Used_all_compatible_sites",
-    "Paternal_transmission", "Mismatch", "Paternity_Index", "Log10_PI")
-  site_rows[[length(site_rows) + 1L]] <- x[columns]
-
   for (analysis in analyses) {
     retained <- select_sites(x, analysis)
     sites <- x[retained, , drop=FALSE]
@@ -505,10 +480,8 @@ for (ids in trios) {
 summary <- bind_rows(summary_rows)
 write.table(summary, file.path(args$out_dir, "Summary_Postnatal_CPI.txt"),
             sep="\t", quote=FALSE, row.names=FALSE, na="NA")
-write.table(bind_rows(site_rows), file.path(args$out_dir, "Site_results.txt"),
-            sep="\t", quote=FALSE, row.names=FALSE, na="NA")
 
 pdf(file.path(args$out_dir, "All_CPIplots.pdf"), width=10, height=4)
 for (plot in all_plots) print(plot)
 dev.off()
-message("Done: tab-separated summary, site results and PDF plots saved.")
+message("Done: tab-separated summary and PDF plots saved.")
