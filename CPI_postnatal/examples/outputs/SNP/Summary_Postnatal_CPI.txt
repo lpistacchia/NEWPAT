@@ -1,0 +1,3 @@
+Trio	Marker_type	Analysis	N_sites	N_heterozygous_child_sites	N_homozygous_child	Matching_sites	Mismatching_sites	Log10_CPI	CPI	Error_constant	Min_child_reads
+MotherM1-FatherF1-ChildC1_SNPs	SNP	heterozygous_child_sites	14	14	0	14	0	5.52542766813783	335295.456251969	0.001	2
+MotherM1-FatherF1-ChildC1_SNPs	SNP	all_compatible_sites	121	14	107	121	0	8.71342029572215	516916381.727906	0.001	2
