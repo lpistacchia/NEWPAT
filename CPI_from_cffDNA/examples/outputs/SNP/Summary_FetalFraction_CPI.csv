@@ -1,0 +1,2 @@
+"Pair","N_sites_mother","N_sites_father","Median_fetal_fraction_raw","Median_fetal_fraction_percent","Max_logCPI","Min_logCPI","Median_logCPI","Mean_logCPI","CPI_medianFF","Error_constant"
+"MotherA1-FatherA1_SNPs",47,47,0.0015,0.15,5.347,-56.047,3.815,2.693,-15.442,0.001
