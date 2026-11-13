@@ -1,0 +1,4 @@
+individuo	informative_sites	mean_contamination	sd_contamination
+SampleA	0	NA	NA
+SampleB	4	0.0214890121393542	0.0415835598682236
+SampleC	2	0.0389696773730208	0.0546906745983284

@@ -7,92 +7,73 @@ suppressPackageStartupMessages({
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) < 3) {
-  stop("\nusage:\n  Rscript detect_contamination.R <dnpanel.txt> <input_path> <output_dir>\n\n")
+  stop("\nusage:\n  Rscript detect_contamination.R <marker_panel.txt> <input_path> <output_dir> [--include_zero | --exclude_zero]\n\nDefault: include sites with N_unexpected = 0.\n\n")
 }
 
 panel_file <- args[1]
 input_path <- args[2]
 output_dir <- args[3]
 
+# Keep the original behaviour unless zero-support sites are explicitly excluded.
+options <- if (length(args) > 3L) args[seq.int(4L, length(args))] else character()
+unknown <- setdiff(options, c("--include_zero", "--exclude_zero"))
+if (length(unknown)) {
+  stop("unknown option(s): ", paste(unknown, collapse=", "))
+}
+if (all(c("--include_zero", "--exclude_zero") %in% options)) {
+  stop("choose either --include_zero or --exclude_zero, not both")
+}
+include_zero_sites <- !("--exclude_zero" %in% options)
+message("Sites with N_unexpected = 0: ",
+        if (include_zero_sites) "included (original behaviour)" else "excluded")
+
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-# load the DNP panel
-first_line <- readLines(panel_file, n = 1, warn = FALSE)
-first_fields <- strsplit(first_line, "\t", fixed = TRUE)[[1]]
-
-clean <- function(x) {
-  x <- tolower(x)
-  x <- gsub("[^a-z0-9]+", "", x)
-  return(x)
+# Detect the panel format from its coordinate columns.
+clean <- function(x) tolower(gsub("[^a-z0-9]+", "", tolower(x)))
+marker_type <- function(x, label) {
+  snp <- "pos" %in% names(x)
+  dnp <- all(c("pos1", "pos2") %in% names(x))
+  if (snp == dnp) {
+    stop(label, ": use chr/pos for SNPs or chr/pos1/pos2 for DNPs")
+  }
+  if (snp) "SNP" else "DNP"
 }
 
-clean_first_fields <- clean(first_fields)
+first_line <- readLines(panel_file, n=1, warn=FALSE)
+if (!length(first_line)) stop("marker panel is empty")
+first_fields <- clean(strsplit(first_line, "\t", fixed=TRUE)[[1]])
+has_header <- "chr" %in% first_fields &&
+  ("pos" %in% first_fields || all(c("pos1", "pos2") %in% first_fields))
 
-has_header <- all(c("chr", "pos1", "pos2") %in% clean_first_fields)
-
+dnplist <- read.table(panel_file, header=has_header, sep="\t",
+                      stringsAsFactors=FALSE, check.names=FALSE,
+                      quote="", comment.char="")
 if (has_header) {
-
-  dnplist <- read.table(
-    panel_file,
-    header = TRUE,
-    sep = "\t",
-    stringsAsFactors = FALSE,
-    check.names = FALSE,
-    quote = "",
-    comment.char = ""
-  )
-
-  clean_current <- clean(colnames(dnplist))
-
-  expected_cols <- c("chr", "pos1", "pos2", "REF", "ALT")
-
-  for (i in seq_along(expected_cols)) {
-    match_idx <- which(clean_current == clean(expected_cols[i]))
-
-    if (length(match_idx) == 1) {
-      colnames(dnplist)[match_idx] <- expected_cols[i]
-    }
+  cleaned <- clean(names(dnplist))
+  for (column in c("chr", "pos", "pos1", "pos2", "REF", "ALT")) {
+    index <- which(cleaned == clean(column))
+    if (length(index) > 1L) stop("duplicate panel column: ", column)
+    if (length(index) == 1L) names(dnplist)[index] <- column
   }
-
 } else {
-
-  dnplist <- read.table(
-    panel_file,
-    header = FALSE,
-    sep = "\t",
-    stringsAsFactors = FALSE,
-    check.names = FALSE,
-    quote = "",
-    comment.char = ""
-  )
-
-  if (ncol(dnplist) < 3) {
-    stop("error: DNP panel must contain at least chr, pos1 and pos2\n")
-  }
-
-  colnames(dnplist)[1:3] <- c("chr", "pos1", "pos2")
-
-  if (ncol(dnplist) >= 4) {
-    colnames(dnplist)[4] <- "REF"
-  }
-
-  if (ncol(dnplist) >= 5) {
-    colnames(dnplist)[5] <- "ALT"
-  }
+  names(dnplist) <- switch(as.character(ncol(dnplist)),
+    "2"=c("chr", "pos"),
+    "3"=c("chr", "pos1", "pos2"),
+    "4"=c("chr", "pos", "REF", "ALT"),
+    "5"=c("chr", "pos1", "pos2", "REF", "ALT"),
+    stop("headerless panels require 2/4 SNP columns or 3/5 DNP columns"))
 }
-
-required_panel_cols <- c("chr", "pos1", "pos2")
-
-if (!all(required_panel_cols %in% colnames(dnplist))) {
-  stop("error: cannot identify chr, pos1 and pos2 in DNP panel\n")
-}
-
+marker <- marker_type(dnplist, "marker panel")
+site_columns <- if (marker == "SNP") c("chr", "pos") else c("chr", "pos1", "pos2")
+position_columns <- setdiff(site_columns, "chr")
+if (!all(site_columns %in% names(dnplist))) stop("missing panel coordinates")
 dnplist <- dnplist %>%
-  mutate(
-    chr = as.character(chr),
-    pos1 = as.numeric(pos1),
-    pos2 = as.numeric(pos2)
-  )
+  mutate(chr=as.character(chr), across(all_of(position_columns), as.numeric))
+if (!nrow(dnplist) || anyNA(dnplist[site_columns])) {
+  stop("marker panel is empty or contains missing/invalid coordinates")
+}
+message("Marker type: ", marker)
 
 # detect whether input_path is a file or directory
 if (file.exists(input_path) && !dir.exists(input_path)) {
@@ -117,7 +98,7 @@ if (length(chip_files) == 0) {
   stop("no input files found in: ", input_path)
 }
 
-# remove the DNP panel file from chip_files
+# remove the marker panel file from the input files
 panel_normalized <- normalizePath(panel_file, mustWork = TRUE)
 chip_normalized <- normalizePath(chip_files, mustWork = TRUE)
 
@@ -126,7 +107,7 @@ chip_files <- chip_files[chip_normalized != panel_normalized]
 # initialize summary dataframe
 contamination_summary <- data.frame(
   individuo = character(),
-  informative_DNPs = integer(),
+  informative_sites = integer(),
   mean_contamination = numeric(),
   sd_contamination = numeric(),
   stringsAsFactors = FALSE
@@ -146,14 +127,10 @@ process_df <- function(file_path) {
     check.names = FALSE
   )
 
-  required_cols <- c(
-    "chr",
-    "pos1",
-    "pos2",
-    "N_REF",
-    "N_ALT",
-    "N_Other"
-  )
+  if (marker_type(df, basename(file_path)) != marker) {
+    stop("input format differs from marker panel: ", basename(file_path))
+  }
+  required_cols <- c(site_columns, "N_REF", "N_ALT", "N_Other")
 
   missing_cols <- setdiff(required_cols, colnames(df))
 
@@ -170,8 +147,7 @@ process_df <- function(file_path) {
   df <- df %>%
     mutate(
       chr = as.character(chr),
-      pos1 = as.numeric(pos1),
-      pos2 = as.numeric(pos2),
+      across(all_of(position_columns), as.numeric),
       N_REF = as.numeric(N_REF),
       N_ALT = as.numeric(N_ALT),
       N_Other = as.numeric(N_Other)
@@ -197,9 +173,7 @@ process_df <- function(file_path) {
   # remove positions without REF or ALT reads
   df <- df %>%
     filter(
-      !is.na(chr),
-      !is.na(pos1),
-      !is.na(pos2),
+      if_all(all_of(site_columns), ~ !is.na(.x)),
       !is.na(N_REF),
       !is.na(N_ALT),
       !is.na(N_Other),
@@ -207,17 +181,17 @@ process_df <- function(file_path) {
       (N_REF + N_ALT) > 0
     )
 
-  # keep only DNP panel positions
+  # keep only marker panel positions
   df <- semi_join(
     df,
     dnplist,
-    by = c("chr", "pos1", "pos2")
+    by = site_columns
   )
 
-  # filter out positions with high N_Other
+  # Use the same Other/total denominator as the CPI scripts.
   df <- df %>%
     mutate(
-      ratio_Other = N_Other / (N_REF + N_ALT)
+      ratio_Other = N_Other / (N_REF + N_ALT + N_Other)
     ) %>%
     filter(
       !is.na(ratio_Other),
@@ -238,6 +212,11 @@ process_df <- function(file_path) {
       ),
       contamination = N_unexpected / (N_REF + N_ALT)
     )
+
+  # This choice applies to the per-site output, site count, mean and SD.
+  if (!include_zero_sites) {
+    filtered_df <- filtered_df %>% filter(N_unexpected > 0)
+  }
 
   # compute mean contamination
   if (nrow(filtered_df) > 0) {
@@ -260,7 +239,7 @@ process_df <- function(file_path) {
     contamination_summary,
     data.frame(
       individuo = sample_name,
-      informative_DNPs = nrow(filtered_df),
+      informative_sites = nrow(filtered_df),
       mean_contamination = mean_contam,
       sd_contamination = sd_contam,
       stringsAsFactors = FALSE

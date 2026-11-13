@@ -1,0 +1,1 @@
+chr	pos1	pos2	REF	ALT	N_REF	N_ALT	N_Other	GL0	GL1	GL2	GT	combined_bases	combined_counts	total_count	reads_discarded_for_indels	ratio_reads_discarded_for_indels	ratio_REF_ALT	ratio_Other	N_unexpected	contamination
