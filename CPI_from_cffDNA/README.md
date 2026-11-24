@@ -80,23 +80,67 @@ This example analyses `MotherA1.txt` with `FatherA1.txt` and `MotherA2.txt` with
 | `--father_prefix` | Filename prefix preceding the paternal identifier |
 | `--popfreq` | Population-frequency table |
 | `--markers` | Optional SNP or DNP marker list |
-| `--min_fetal_reads` | Minimum minor-allele read support; default: `2` |
+| `--min_fetal_reads` | Minimum absolute minor-allele read support; defaults to `2` when neither filter is specified |
+| `--min_fetal_percent` | Minimum minor-allele read percentage per site; optional (e.g. `0.25` means 0.25%) |
 | `--err_const_snp` | SNP mismatch constant; default: `0.001` |
 | `--err_const_dnp` | DNP mismatch constant; default: `0.0000892303778101497` |
 
 The marker type is detected automatically, and the script checks coordinate and allele consistency.
 
-### Minimum read support
+### Minimum fetal read support
 
-`--min_fetal_reads` sets the minimum number of reads supporting the minor allele at a maternal-informative site.
+Informative maternal sites are selected using the REF allele
+ratio (>= 0.9 or <= 0.1).
 
-The default is `2`. To require at least five reads, add:
+Minor-allele reads represent putative fetal allele support:
+ALT reads at maternal homozygous REF sites and REF reads
+at maternal homozygous ALT sites.
 
-```bash
---min_fetal_reads 5
+The percentage is calculated independently at each site:
+
+```
+fetal_percent = 100 * fetal_reads / (N_REF + N_ALT)
 ```
 
-This parameter controls informative-site selection, the sites used for fetal-fraction estimation, and the starting threshold of the CPI curve. It must be a positive integer.
+`N_Other` is excluded from the denominator.
+This percentage is distinct from the fetal-fraction estimate.
+
+Two optional filters are available:
+
+- `--min_fetal_reads`: minimum absolute read support
+  (positive integer).
+- `--min_fetal_percent`: minimum percentage of minor-allele
+  reads per site (greater than 0 and up to 100).
+
+| Configuration | Site selection |
+|---|---|
+| Neither parameter specified | At least 2 minor-allele reads |
+| Only `--min_fetal_reads` | Absolute read filter only |
+| Only `--min_fetal_percent` | Percentage filter only |
+| Both parameters specified | Both thresholds must be satisfied |
+
+Examples:
+
+```bash
+# Absolute read filter
+--min_fetal_reads 5
+
+# Percentage filter
+--min_fetal_percent 0.25
+
+# Combined filters
+--min_fetal_reads 2 --min_fetal_percent 0.25
+```
+
+These filters apply to both SNPs and DNPs and control
+informative-site selection for fetal-fraction estimation
+and CPI calculation.
+
+The CPI curve remains based on increasing absolute read
+thresholds. When only the percentage filter is specified,
+the curve starts at one read.
+
+The fetal-fraction and CPI formulas remain unchanged.
 
 ### Mismatch constants
 
@@ -127,6 +171,8 @@ Values are proportions, not percentages. The defaults are specific to this workf
 | `Median_logCPI`, `Mean_logCPI` | Median and mean log₁₀(CPI) across read thresholds |
 | `CPI_medianFF` | log₁₀(CPI) at the threshold nearest the rounded median minor-allele read count |
 | `Error_constant` | Mismatch constant used |
+| `Min_fetal_reads` | Absolute read threshold used; NA if inactive |
+| `Min_fetal_percent` | Percentage threshold used; NA if inactive |
 
 ### Plots
 

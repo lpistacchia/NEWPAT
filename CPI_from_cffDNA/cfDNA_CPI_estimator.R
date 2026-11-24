@@ -28,18 +28,51 @@ parser$add_argument("--err_const_snp", default="0.001",
 parser$add_argument("--err_const_dnp", default="0.0000892303778101497",
                     help="DNP mismatch constant [default: %(default)s]")
 
-parser$add_argument("--min_fetal_reads", type="double", default=2,
-                    help="Minimum minor-allele read support [default: %(default)s]")
+parser$add_argument("--min_fetal_reads",
+                    type="double", default=NULL,
+                    help="Minimum fetal reads; default 2 if neither filter is specified")
+
+parser$add_argument("--min_fetal_percent",
+                    type="double", default=NULL,
+                    help="Minimum fetal-read percentage; default NULL")
 
 args <- parser$parse_args()
+
 min_fetal_reads <- args$min_fetal_reads
-if (length(min_fetal_reads) != 1L || !is.finite(min_fetal_reads) ||
-    min_fetal_reads < 1 || min_fetal_reads != floor(min_fetal_reads) ||
-    min_fetal_reads > .Machine$integer.max) {
-  stop("--min_fetal_reads must be a positive integer")
+min_fetal_percent <- args$min_fetal_percent
+
+if (is.null(min_fetal_reads) && is.null(min_fetal_percent)) {
+  min_fetal_reads <- 2L
 }
-min_fetal_reads <- as.integer(min_fetal_reads)
-message("Minimum fetal-read support: ", min_fetal_reads)
+
+if (!is.null(min_fetal_reads)) {
+  if (length(min_fetal_reads) != 1L ||
+      !is.finite(min_fetal_reads) ||
+      min_fetal_reads < 1 ||
+      min_fetal_reads != floor(min_fetal_reads) ||
+      min_fetal_reads > .Machine$integer.max) {
+    stop("--min_fetal_reads must be a positive integer")
+  }
+  min_fetal_reads <- as.integer(min_fetal_reads)
+}
+
+if (!is.null(min_fetal_percent)) {
+  if (length(min_fetal_percent) != 1L ||
+      !is.finite(min_fetal_percent) ||
+      min_fetal_percent <= 0 ||
+      min_fetal_percent > 100) {
+    stop("--min_fetal_percent must be in (0, 100]")
+  }
+}
+
+curve_start <- if (is.null(min_fetal_reads)) 1L else min_fetal_reads
+
+message("Minimum fetal reads: ",
+        if (is.null(min_fetal_reads)) "NULL" else min_fetal_reads)
+
+message("Minimum fetal-read percentage: ",
+        if (is.null(min_fetal_percent)) "NULL"
+        else paste0(min_fetal_percent, "%"))
 
 ## make output dirs
 if (!dir.exists(args$out_dir)) dir.create(args$out_dir, recursive = TRUE, showWarnings = FALSE)
@@ -228,25 +261,44 @@ check_pair <- function(mother, father) {
 ## helper: compute fetal_reads on mother dataframe
 ## note: this mirrors the logic used in cpi iteration
 compute_madre_info <- function(madre_df) {
-  madre_df %>%
+
+  info <- madre_df %>%
     dplyr::filter(
-      (ratio_Ref_mother >= 0.9 & Alt_mother >= min_fetal_reads) |
-        (ratio_Ref_mother <= 0.1 & Ref_mother >= min_fetal_reads)
+      ratio_Ref_mother >= 0.9 |
+      ratio_Ref_mother <= 0.1
     ) %>%
     dplyr::mutate(
-      fetal_reads = ifelse(ratio_Ref_mother >= 0.9, Alt_mother, Ref_mother)
+      fetal_reads = ifelse(
+        ratio_Ref_mother >= 0.9,
+        Alt_mother,
+        Ref_mother
+      ),
+      fetal_percent = 100 * fetal_reads /
+        (Ref_mother + Alt_mother)
     )
+
+  if (!is.null(min_fetal_reads)) {
+    info <- info %>%
+      dplyr::filter(fetal_reads >= min_fetal_reads)
+  }
+
+  if (!is.null(min_fetal_percent)) {
+    info <- info %>%
+      dplyr::filter(fetal_percent >= min_fetal_percent)
+  }
+
+  return(info)
 }
 
 ## Compute CPI across minor-allele read thresholds.
 run_CPI_iteration <- function(madre, padre, err_const) {
   madre_info <- compute_madre_info(madre)
   max_fetal <- suppressWarnings(max(madre_info$fetal_reads, na.rm=TRUE))
-  if (!is.finite(max_fetal) || max_fetal < min_fetal_reads)
+  if (!is.finite(max_fetal) || max_fetal < curve_start)
     return(list(results=data.frame(), madre_info=madre_info))
 
   results <- data.frame()
-  for (i in seq.int(min_fetal_reads, max_fetal)) {
+  for (i in seq.int(curve_start, max_fetal)) {
     madre_filt <- madre_info %>% dplyr::filter(fetal_reads >= i)
 
     df_merged <- dplyr::inner_join(madre_filt, padre, by=site_columns) %>%
@@ -322,8 +374,8 @@ plot_CPI <- function(df, pair_name,
   max_iter <- max(df$Iteration, na.rm = TRUE)
 
   step <- if (max_iter <= 20) 1 else if (max_iter <= 100) 10 else if (max_iter <= 500) 25 else 50
-  ticks <- unique(c(min_fetal_reads,
-                    seq(min_fetal_reads, max_iter, by=step), max_iter))
+  ticks <- unique(c(curve_start,
+                    seq(curve_start, max_iter, by=step), max_iter))
 
   cfDNA_lbl <- if (is.finite(cfDNA_percent)) {
     sprintf("%.2f", cfDNA_percent)
@@ -383,7 +435,7 @@ plot_CPI <- function(df, pair_name,
     scale_x_continuous(
       name = "minimum number of fetal reads considered",
       breaks = ticks,
-      limits = c(min_fetal_reads, max(min_fetal_reads + 1, max_iter)),
+      limits = c(curve_start, max(curve_start + 1, max_iter)),
       expand = expansion(mult = c(0.02, 0.02))
     ) +
 
@@ -477,7 +529,11 @@ for (i in seq_len(nrow(coppie))) {
     Median_logCPI = if (length(values)) round(stats::median(values), 3) else NA_real_,
     Mean_logCPI = if (length(values)) round(mean(values), 3) else NA_real_,
     CPI_medianFF = round(cpi_at_med, 3),
-    Error_constant = err_const
+    Error_constant = err_const,
+    Min_fetal_reads = if (is.null(min_fetal_reads))
+      NA_integer_ else min_fetal_reads,
+    Min_fetal_percent = if (is.null(min_fetal_percent))
+      NA_real_ else min_fetal_percent
   ))
 
   plot <- plot_CPI(res, pair_name,
