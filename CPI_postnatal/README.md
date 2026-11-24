@@ -32,6 +32,33 @@ Sites with opposite mother-child homozygotes are excluded. A paternal mismatch i
 
 ## 3. Set the minimum read support
 
+### Preliminary quality control
+
+Quality control is applied independently to the mother, putative
+father and child before allelic support and CPI site selection.
+
+For each individual, a site must satisfy:
+
+- Total coverage = N_REF + N_ALT + N_Other.
+- Other / total_count <= 0.10.
+- Total coverage >= the specified minimum coverage, if provided.
+
+The optional `--min_coverage` parameter sets the minimum total
+coverage required in each trio member. It must be a positive integer.
+
+For example: `--min_coverage 1000`.
+
+A site is excluded from the entire trio if any of the three
+individuals fails the preliminary quality control.
+
+By default, `--min_coverage` is NULL and no additional minimum
+coverage threshold is applied.
+
+This parameter is independent of `--min_child_reads` and applies
+to both SNP and DNP analyses.
+
+### Child allelic support
+
 `--min_child_reads` sets the minimum support for each called allele in the child. The default is `2`.
 
 - A heterozygous child requires at least two reads for each allele.
@@ -115,6 +142,12 @@ Mismatch constants can be changed with `--err_const_snp` or `--err_const_dnp`, u
 | `All_CPIplots.pdf` | All plots in one PDF |
 
 Start with `Summary_Postnatal_CPI.txt`. It reports the number of sites, matching and mismatching sites, CPI, log₁₀(CPI), and the settings used.
+
+The `Min_coverage` column reports the configured minimum coverage
+per trio member (`NA` when not specified). The `Min_child_reads`
+column reports the independent child allelic support threshold.
+
+When no eligible sites remain, CPI and log10(CPI) are reported as `NA`.
 
 With `--site_selection both`, each trio has two rows: one for `heterozygous_child_sites` and one for `all_compatible_sites`.
 

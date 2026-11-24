@@ -16,6 +16,9 @@ parser$add_argument("--father_prefix", default="full_output_")
 parser$add_argument("--child_prefix", default="full_output_")
 parser$add_argument("--popfreq", required=TRUE)
 parser$add_argument("--markers", required=FALSE)
+parser$add_argument("--min_coverage", type="double", default=NULL,
+                    help="Minimum total coverage per site in each trio member (REF + ALT + Other)")
+
 parser$add_argument("--min_child_reads", type="double", default=2,
                     help="Minimum child reads supporting each called allele [default: 2]")
 parser$add_argument("--err_const_snp", default="0.001")
@@ -36,6 +39,20 @@ if (!is.finite(args$min_child_reads) || args$min_child_reads < 1 ||
   stop("--min_child_reads must be a positive integer below the R integer limit")
 }
 min_child_reads <- as.integer(args$min_child_reads)
+
+min_coverage <- args$min_coverage
+
+if (!is.null(min_coverage)) {
+  if (!is.finite(min_coverage) || min_coverage < 1 ||
+      min_coverage != floor(min_coverage) ||
+      min_coverage >= .Machine$integer.max) {
+    stop("--min_coverage must be a positive integer below the R integer limit")
+  }
+  min_coverage <- as.integer(min_coverage)
+}
+
+message("Minimum coverage per trio member: ",
+        if (is.null(min_coverage)) "not set" else min_coverage)
 if (dir.exists(args$out_dir) && length(list.files(args$out_dir, all.files=TRUE,
                                                 no..=TRUE))) {
   stop("Output directory is not empty; choose a new --out_dir")
@@ -227,9 +244,17 @@ classify_genotype <- function(ratio) {
 }
 
 # Apply the same Other/total filter separately to every sample.
-passes_quality <- function(ref, alt, other, total) {
+passes_quality <- function(ref, alt, other, total, coverage=NULL) {
   ratio <- other / total
-  total > 0 & (ref + alt) > 0 & is.finite(ratio) & ratio <= 0.10
+
+  valid <- total > 0 & (ref + alt) > 0 &
+    is.finite(ratio) & ratio <= 0.10
+
+  if (!is.null(coverage)) {
+    valid <- valid & total >= coverage
+  }
+
+  valid
 }
 stopifnot(identical(passes_quality(c(90,89,0), c(0,0,0), c(10,11,0),
                                   c(100,100,0)), c(TRUE,FALSE,FALSE)))
@@ -276,7 +301,11 @@ prepare_sample <- function(id, prefix, role) {
   x$ratio <- x$N_REF / (x$N_REF + x$N_ALT)
   x$GT <- classify_genotype(x$ratio)
   x$Other_ratio <- x$N_Other / x$total_count
-  x$Quality_pass <- passes_quality(x$N_REF, x$N_ALT, x$N_Other, x$total_count)
+  x$Quality_pass <- passes_quality(
+    x$N_REF, x$N_ALT, x$N_Other, x$total_count,
+    coverage=min_coverage
+  )
+  x$GT[!x$Quality_pass] <- NA_character_
   x$Present <- TRUE
   x <- x[c(site_columns, "REF", "ALT", count_columns, "ratio", "GT",
            "Other_ratio", "Quality_pass", "Present", "Missing_total_at_zero_coverage")]
@@ -397,7 +426,8 @@ for (ids in trios) {
       Matching_sites=sum(sites$Mismatch %in% FALSE),
       Mismatching_sites=sum(sites$Mismatch %in% TRUE),
       Log10_CPI=log_cpi, CPI=cpi, Error_constant=err_const,
-      Min_child_reads=min_child_reads)
+      Min_child_reads=min_child_reads,
+      Min_coverage=if (is.null(min_coverage)) NA_integer_ else min_coverage)
 
     if (nrow(sites)) {
       thresholds <- seq.int(min_child_reads, max(sites$Child_support))
