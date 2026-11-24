@@ -3,7 +3,6 @@
 suppressPackageStartupMessages({
   library(argparse)
   library(dplyr)
-  library(ggplot2)
 })
 
 parser <- ArgumentParser(description="Postnatal CPI from SNPcall or DNPcall trio outputs")
@@ -19,26 +18,32 @@ parser$add_argument("--markers", required=FALSE)
 parser$add_argument("--min_coverage", type="double", default=NULL,
                     help="Minimum total coverage per site in each trio member (REF + ALT + Other)")
 
-parser$add_argument("--min_child_reads", type="double", default=2,
-                    help="Minimum child reads supporting each called allele [default: 2]")
-parser$add_argument("--err_const_snp", default="0.001")
-parser$add_argument("--err_const_dnp", default="0.0000892303778101497")
-parser$add_argument("--site_selection", choices=c("other_allele", "all", "both"),
-                    default="both",
-                    help="other_allele: heterozygous children; all: all compatible children; both: compare both [default: both]")
-args <- parser$parse_args()
-analyses <- switch(args$site_selection,
-  other_allele="heterozygous_child_sites",
-  all="all_compatible_sites",
-  both=c("heterozygous_child_sites", "all_compatible_sites"))
-message("Site selection: ", args$site_selection)
+parser$add_argument("--mismatch_probability_snp", default="0.001")
+parser$add_argument("--mismatch_probability_dnp", default="0.0000892303778101497")
+parser$add_argument("--include_hom_hom",
+                    choices=c("TRUE", "FALSE"), default="TRUE")
+parser$add_argument("--include_hom_het",
+                    choices=c("TRUE", "FALSE"), default="TRUE")
+parser$add_argument("--include_het_hom",
+                    choices=c("TRUE", "FALSE"), default="TRUE")
+parser$add_argument("--include_het_het",
+                    choices=c("TRUE", "FALSE"), default="TRUE")
 
-if (!is.finite(args$min_child_reads) || args$min_child_reads < 1 ||
-    args$min_child_reads != floor(args$min_child_reads) ||
-    args$min_child_reads >= .Machine$integer.max) {
-  stop("--min_child_reads must be a positive integer below the R integer limit")
+args <- parser$parse_args()
+
+selection <- c(
+  hom_hom=args$include_hom_hom == "TRUE",
+  hom_het=args$include_hom_het == "TRUE",
+  het_hom=args$include_het_hom == "TRUE",
+  het_het=args$include_het_het == "TRUE"
+)
+
+if (!any(selection)) {
+  stop("At least one genotype combination must be enabled")
 }
-min_child_reads <- as.integer(args$min_child_reads)
+
+message("Selected combinations: ",
+        paste(names(selection)[selection], collapse=", "))
 
 min_coverage <- args$min_coverage
 
@@ -127,11 +132,11 @@ read_error_constant <- function(value, option) {
 }
 
 error_constants <- list(
-  SNP = read_error_constant(args$err_const_snp, "--err_const_snp"),
-  DNP = read_error_constant(args$err_const_dnp, "--err_const_dnp")
+  SNP = read_error_constant(args$mismatch_probability_snp, "--mismatch_probability_snp"),
+  DNP = read_error_constant(args$mismatch_probability_dnp, "--mismatch_probability_dnp")
 )
-err_const <- error_constants[[marker]]
-message("Mismatch constant used for ", marker, ": ", sprintf("%.17g", err_const))
+mismatch_probability <- error_constants[[marker]]
+message("Mismatch probability used for ", marker, ": ", sprintf("%.17g", mismatch_probability))
 
 site_key <- function(x) {
   do.call(paste, c(unname(as.list(x[site_columns])), sep="\t"))
@@ -259,16 +264,26 @@ passes_quality <- function(ref, alt, other, total, coverage=NULL) {
 stopifnot(identical(passes_quality(c(90,89,0), c(0,0,0), c(10,11,0),
                                   c(100,100,0)), c(TRUE,FALSE,FALSE)))
 
-select_sites <- function(x, analysis) {
-  x$Status == "eligible" &
-    (analysis == "all_compatible_sites" | x$GT_child %in% "0/1")
+classify_combination <- function(m, child) {
+  case_when(
+    is.na(m) | is.na(child) ~ NA_character_,
+    m == "0/1" & child == "0/1" ~ "het_het",
+    m == "0/1" & child %in% c("0/0", "1/1") ~ "het_hom",
+    m %in% c("0/0", "1/1") & child == "0/1" ~ "hom_het",
+    m == child & m %in% c("0/0", "1/1") ~ "hom_hom",
+    TRUE ~ NA_character_
+  )
 }
-selection_test <- data.frame(Status=c("eligible", "eligible", "quality_filter"),
-                             GT_child=c("0/1", "0/0", "0/1"))
-stopifnot(identical(select_sites(selection_test, "heterozygous_child_sites"),
-                    c(TRUE,FALSE,FALSE)),
-          identical(select_sites(selection_test, "all_compatible_sites"),
-                    c(TRUE,TRUE,FALSE)))
+
+required_allele <- function(m, child) {
+  case_when(
+    m == "0/0" & child == "0/1" ~ "ALT",
+    m == "1/1" & child == "0/1" ~ "REF",
+    m %in% c("0/0", "0/1") & child == "0/0" ~ "REF",
+    m %in% c("1/1", "0/1") & child == "1/1" ~ "ALT",
+    TRUE ~ NA_character_
+  )
+}
 
 prepare_sample <- function(id, prefix, role) {
   path <- file.path(args$pileup_dir, paste0(prefix, id, ".txt"))
@@ -314,8 +329,10 @@ prepare_sample <- function(id, prefix, role) {
   x
 }
 
-# With a homozygous mother, the compatible child's genotype identifies one
-# obligatory paternal allele, even when mother and child are both homozygous.
+# PI for sites with an obligatory paternal allele.
+# The same formula applies to compatible homozygous
+# and heterozygous mothers.
+
 site_pi <- function(required, father_gt, ref_frequency, alt_frequency, epsilon) {
   frequency <- ifelse(required == "REF", ref_frequency, alt_frequency)
   transmission <- ifelse(father_gt == "0/1", 0.5,
@@ -338,9 +355,7 @@ stopifnot(isTRUE(all.equal(test$PI, c(2.5, 1.25, 1/0.6, 0.001/0.6))),
           identical(test$Mismatch, c(FALSE, FALSE, FALSE, TRUE)))
 
 summary_rows <- list()
-all_plots <- list()
-plots_dir <- file.path(args$out_dir, "plots")
-dir.create(plots_dir, recursive=TRUE, showWarnings=FALSE)
+
 for (ids in trios) {
   trio_name <- paste0("Mother", ids[1], "-Father", ids[2], "-Child", ids[3],
                       "_", marker, "s")
@@ -373,145 +388,139 @@ for (ids in trios) {
   }
   m <- x$GT_mother
   cgt <- x$GT_child
-  x$Mother_homozygous <- !is.na(m) & m %in% c("0/0", "1/1")
-  x$Mother_child_incompatible <- x$Mother_homozygous & !is.na(cgt) &
-    ((m == "0/0" & cgt == "1/1") | (m == "1/1" & cgt == "0/0"))
-  x$Required_paternal_allele <- case_when(
-    m == "0/0" & cgt == "0/1" ~ "ALT",
-    m == "1/1" & cgt == "0/1" ~ "REF",
-    m == "0/0" & cgt == "0/0" ~ "REF",
-    m == "1/1" & cgt == "1/1" ~ "ALT",
-    TRUE ~ NA_character_)
-  x$Child_support <- ifelse(x$Required_paternal_allele == "REF",
-                            x$N_REF_child, x$N_ALT_child)
-  x$Child_called_alleles_supported <- case_when(
-    cgt == "0/1" ~ x$N_REF_child >= min_child_reads & x$N_ALT_child >= min_child_reads,
-    cgt == "0/0" ~ x$N_REF_child >= min_child_reads,
-    cgt == "1/1" ~ x$N_ALT_child >= min_child_reads,
-    TRUE ~ FALSE)
+
+  x$Mother_child_incompatible <- !is.na(m) & !is.na(cgt) &
+    ((m == "0/0" & cgt == "1/1") |
+     (m == "1/1" & cgt == "0/0"))
+
+  x$Genotype_combination <- classify_combination(m, cgt)
+
+  x$Required_paternal_allele <- required_allele(m, cgt)
+
+  x$Combination_selected <-
+    x$Genotype_combination %in% names(selection)[selection]
+
   x$Status <- case_when(
-    is.na(x$Present_mother) | is.na(x$Present_father) | is.na(x$Present_child) ~ "missing_call",
-    !x$Quality_pass_mother | !x$Quality_pass_father | !x$Quality_pass_child ~ "quality_filter",
-    !x$Mother_homozygous ~ "mother_not_homozygous",
+    is.na(x$Present_mother) |
+      is.na(x$Present_father) |
+      is.na(x$Present_child) ~ "missing_call",
+
+    !x$Quality_pass_mother |
+      !x$Quality_pass_father |
+      !x$Quality_pass_child ~ "quality_filter",
+
+    is.na(m) ~ "mother_unassigned",
     is.na(cgt) ~ "child_unassigned",
-    !x$Child_called_alleles_supported ~ "insufficient_child_support",
-    x$Mother_child_incompatible ~ "mother_child_incompatible",
     is.na(x$GT_father) ~ "father_unassigned",
-    is.na(x$Ref_f.pop) | is.na(x$Alt_f.pop) ~ "missing_population_frequency",
-    TRUE ~ "eligible")
+
+    x$Mother_child_incompatible ~ "mother_child_incompatible",
+
+    !x$Combination_selected ~ "combination_not_selected",
+
+    is.na(x$Ref_f.pop) |
+      is.na(x$Alt_f.pop) ~ "missing_population_frequency",
+
+    TRUE ~ "eligible"
+  )
 
   eligible <- x$Status == "eligible"
+
+  obligatory <- eligible &
+    !is.na(x$Required_paternal_allele)
+
+  no_obligatory <- eligible &
+    x$Genotype_combination %in% "het_het"
+
+  stopifnot(all(!eligible | obligatory | no_obligatory))
+
   x$Paternity_Index <- NA_real_
   x$Mismatch <- NA
   x$Paternal_transmission <- NA_real_
-  if (any(eligible)) {
-    pi <- site_pi(x$Required_paternal_allele[eligible], x$GT_father[eligible],
-                  x$Ref_f.pop[eligible], x$Alt_f.pop[eligible], err_const)
-    x$Paternity_Index[eligible] <- pi$PI
-    x$Mismatch[eligible] <- pi$Mismatch
-    x$Paternal_transmission[eligible] <- pi$Transmission
+  x$Paternity_status <- NA_character_
+
+  if (any(obligatory)) {
+    pi <- site_pi(
+      x$Required_paternal_allele[obligatory],
+      x$GT_father[obligatory],
+      x$Ref_f.pop[obligatory],
+      x$Alt_f.pop[obligatory],
+      mismatch_probability
+    )
+
+    x$Paternity_Index[obligatory] <- pi$PI
+    x$Mismatch[obligatory] <- pi$Mismatch
+    x$Paternal_transmission[obligatory] <- pi$Transmission
+
+    x$Paternity_status[obligatory] <-
+      ifelse(pi$Mismatch, "mismatch", "match")
   }
-  for (analysis in analyses) {
-    retained <- select_sites(x, analysis)
-    sites <- x[retained, , drop=FALSE]
 
-    # Sum logs directly to avoid numerical underflow of the product.
-    log_cpi <- if (nrow(sites)) sum(log10(sites$Paternity_Index)) else NA_real_
-    cpi <- if (is.na(log_cpi)) NA_real_ else 10^log_cpi
-    summary_rows[[length(summary_rows) + 1L]] <- data.frame(
-      Trio=trio_name, Marker_type=marker, Analysis=analysis,
-      N_sites=nrow(sites),
-      N_heterozygous_child_sites=sum(sites$GT_child == "0/1"),
-      N_homozygous_child=sum(sites$GT_child %in% c("0/0", "1/1")),
-      Matching_sites=sum(sites$Mismatch %in% FALSE),
-      Mismatching_sites=sum(sites$Mismatch %in% TRUE),
-      Log10_CPI=log_cpi, CPI=cpi, Error_constant=err_const,
-      Min_child_reads=min_child_reads,
-      Min_coverage=if (is.null(min_coverage)) NA_integer_ else min_coverage)
+  # Mother and child are both heterozygous.
+  # PI equals 1 when REF and ALT frequencies sum to 1.
+  if (any(no_obligatory)) {
+    x$Paternity_Index[no_obligatory] <-
+      1 / (x$Ref_f.pop[no_obligatory] +
+           x$Alt_f.pop[no_obligatory])
 
-    if (nrow(sites)) {
-      thresholds <- seq.int(min_child_reads, max(sites$Child_support))
-      curve <- bind_rows(lapply(thresholds, function(t) {
-        use <- sites$Child_support >= t
-        data.frame(Min_child_reads=t, N_sites=sum(use),
-                   Log10_CPI=sum(log10(sites$Paternity_Index[use])),
-                   Matching_sites=sum(!sites$Mismatch[use]),
-                   Mismatching_sites=sum(sites$Mismatch[use]))
-      }))
-      # Keep the left axis on the CPI scale. Map counts onto it for display
-      # and recover their original values on the right axis.
-      cpi_range <- range(c(curve$Log10_CPI, -4, 4), finite=TRUE)
-      count_max <- max(c(curve$Matching_sites, curve$Mismatching_sites, 1))
-      count_scale <- diff(cpi_range) / count_max
-      count_offset <- cpi_range[1]
-      plot_data <- curve
-      plot_data$Plot_matching <- curve$Matching_sites * count_scale + count_offset
-      plot_data$Plot_mismatching <- curve$Mismatching_sites * count_scale + count_offset
-      count_axis <- local({
-        scale <- count_scale
-        offset <- count_offset
-        function(y) (y - offset) / scale
-      })
-      x_ticks <- pretty(c(min_child_reads, max(thresholds)), n=6)
-      x_ticks <- sort(unique(c(min_child_reads,
-        x_ticks[x_ticks >= min_child_reads & x_ticks <= max(thresholds)])))
+    x$Paternity_status[no_obligatory] <-
+      "no_obligatory_allele"
+  }
 
-      plot <- ggplot(plot_data, aes(x=Min_child_reads)) +
-        annotate("rect", xmin=-Inf, xmax=Inf, ymin=-Inf, ymax=-4,
-                 fill="red", alpha=0.08) +
-        annotate("rect", xmin=-Inf, xmax=Inf, ymin=-4, ymax=4,
-                 fill="grey85", alpha=1) +
-        annotate("rect", xmin=-Inf, xmax=Inf, ymin=4, ymax=Inf,
-                 fill="green", alpha=0.08) +
-        geom_hline(yintercept=c(-4, 4), colour="grey50",
-                   linetype="dotted", linewidth=0.4) +
-        geom_line(aes(y=Log10_CPI), colour="black") +
-        geom_point(aes(y=Log10_CPI), colour="black", size=1.3) +
-        geom_line(aes(y=Plot_matching), colour="green") +
-        geom_line(aes(y=Plot_mismatching),
-                  colour="orange", linetype="dashed") +
-        # Draw the test marker last so the black curve cannot cover it.
-        geom_vline(xintercept=min_child_reads, colour="red",
-                   linetype="dashed", linewidth=1) +
-        annotate("point", x=min_child_reads, y=log_cpi,
-                 shape=21, size=3, stroke=1, colour="red", fill="white") +
-        annotate("label", x=Inf, y=Inf,
-                 label=sprintf("Test log10(CPI): %.3f\nSites: %d; minimum reads: %d",
-                               log_cpi, nrow(sites), min_child_reads),
-                 hjust=1.05, vjust=1.10, size=3, fill="white", colour="black") +
-        scale_y_continuous(name=expression(log[10](CPI)),
-          sec.axis=sec_axis(count_axis,
-                            name="Matching / mismatching sites"),
-          expand=expansion(mult=c(0.02, 0.14))) +
-        scale_x_continuous(
-          name="Minimum child reads supporting the obligatory paternal allele",
-          breaks=x_ticks,
-          limits=c(min_child_reads, max(min_child_reads + 1, max(thresholds))),
-          expand=expansion(mult=c(0.03, 0.02))) +
-        labs(title=paste(trio_name, analysis, sep=" — ")) +
-        theme_bw(base_size=9) +
-        theme(plot.title=element_text(size=9, hjust=0),
-              axis.title=element_text(size=8),
-              axis.text.x=element_text(angle=45, hjust=1, size=7),
-              panel.border=element_rect(colour="black", fill=NA, linewidth=0.6),
-              plot.margin=margin(8,12,8,8))
+  sites <- x[eligible, , drop=FALSE]
+
+  log_cpi <- if (nrow(sites)) {
+    sum(log10(sites$Paternity_Index))
+  } else {
+    NA_real_
+  }
+
+  cpi <- if (is.na(log_cpi)) NA_real_ else 10^log_cpi
+
+  summary_rows[[length(summary_rows) + 1L]] <- data.frame(
+    Trio=trio_name,
+    Marker_type=marker,
+
+    N_sites=nrow(sites),
+
+    N_hom_hom=sum(sites$Genotype_combination == "hom_hom"),
+    N_hom_het=sum(sites$Genotype_combination == "hom_het"),
+    N_het_hom=sum(sites$Genotype_combination == "het_hom"),
+    N_het_het=sum(sites$Genotype_combination == "het_het"),
+
+    Matching_sites=sum(sites$Mismatch %in% FALSE),
+    Mismatching_sites=sum(sites$Mismatch %in% TRUE),
+
+    No_obligatory_allele_sites=sum(no_obligatory),
+
+    Maternal_incompatible_sites=
+      sum(x$Status == "mother_child_incompatible"),
+
+    Log10_CPI=log_cpi,
+    CPI=cpi,
+
+    Mismatch_probability=mismatch_probability,
+
+    Min_coverage=if (is.null(min_coverage)) {
+      NA_integer_
     } else {
-      curve <- data.frame(Min_child_reads=integer(), N_sites=integer(),
-                          Log10_CPI=numeric(), Matching_sites=integer(),
-                          Mismatching_sites=integer())
-      plot <- ggplot() + theme_void() +
-        labs(title=paste(trio_name, analysis, "— no eligible sites"))
-    }
-    ggsave(file.path(plots_dir, paste0(trio_name, "_", analysis, "_CPIplot.pdf")),
-           plot, width=10, height=4)
-    all_plots[[length(all_plots) + 1L]] <- plot
-  }
+      min_coverage
+    },
+
+    Include_hom_hom=unname(selection["hom_hom"]),
+    Include_hom_het=unname(selection["hom_het"]),
+    Include_het_hom=unname(selection["het_hom"]),
+    Include_het_het=unname(selection["het_het"])
+  )
+
+  write.table(
+    x,
+    file.path(args$out_dir, paste0(trio_name, "_sites.txt")),
+    sep="\t", quote=FALSE, row.names=FALSE, na="NA"
+  )
 }
+
 summary <- bind_rows(summary_rows)
 write.table(summary, file.path(args$out_dir, "Summary_Postnatal_CPI.txt"),
             sep="\t", quote=FALSE, row.names=FALSE, na="NA")
 
-pdf(file.path(args$out_dir, "All_CPIplots.pdf"), width=10, height=4)
-for (plot in all_plots) print(plot)
-dev.off()
-message("Done: tab-separated summary and PDF plots saved.")
+message("Done: trio CPI summary and site-level results saved.")

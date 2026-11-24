@@ -1,3 +1,2 @@
-Trio	Marker_type	Analysis	N_sites	N_heterozygous_child_sites	N_homozygous_child	Matching_sites	Mismatching_sites	Log10_CPI	CPI	Error_constant	Min_child_reads	Min_coverage
-MotherM1-FatherF1-ChildC1_SNPs	SNP	heterozygous_child_sites	14	14	0	14	0	5.52542766813783	335295.456251969	0.001	2	NA
-MotherM1-FatherF1-ChildC1_SNPs	SNP	all_compatible_sites	121	14	107	121	0	8.71342029572215	516916381.727906	0.001	2	NA
+Trio	Marker_type	N_sites	N_hom_hom	N_hom_het	N_het_hom	N_het_het	Matching_sites	Mismatching_sites	No_obligatory_allele_sites	Maternal_incompatible_sites	Log10_CPI	CPI	Mismatch_probability	Min_coverage	Include_hom_hom	Include_hom_het	Include_het_hom	Include_het_het
+MotherM1-FatherF1-ChildC1_SNPs	SNP	143	107	14	12	10	133	0	10	0	10.2806466173021	19082998550.2339	0.001	NA	TRUE	TRUE	TRUE	TRUE

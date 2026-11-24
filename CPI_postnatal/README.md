@@ -14,61 +14,91 @@ The examples provided here use:
 - `FatherF1.txt`: putative father.
 - `ChildC1.txt`: child.
 
-R ≥ 4.2.0 and the packages `argparse`, `dplyr`, and `ggplot2` are required.
+R ≥ 4.2.0 and the packages `argparse` and `dplyr` are required.
 
-## 2. Choose the sites to analyse
+## 2. Site selection
 
-Only sites with a homozygous mother are considered.
+Sites are selected according to the mother-child genotype combination.
 
-| `--site_selection` | Selection |
-|---|---|
-| `other_allele` | Includes sites where the child is heterozygous, so an allele different from the maternal allele is observed |
-| `all` | Also includes sites where the child is homozygous for the same allele as the mother |
-| `both` | Runs both selections; default |
+| Parameter | Mother | Child | Default |
+|---|---|---|---|
+| `--include_hom_hom` | Homozygous | Homozygous | TRUE |
+| `--include_hom_het` | Homozygous | Heterozygous | TRUE |
+| `--include_het_hom` | Heterozygous | Homozygous | TRUE |
+| `--include_het_het` | Heterozygous | Heterozygous | TRUE |
 
-The two selections appear in the outputs as `heterozygous_child_sites` and `all_compatible_sites`.
+Each combination can be included or excluded independently using `TRUE` or `FALSE`. At least one combination must be enabled.
 
-Sites with opposite mother-child homozygotes are excluded. A paternal mismatch is retained and contributes through the mismatch constant.
+Maternal incompatibilities are excluded. Paternal mismatches are retained.
 
-## 3. Set the minimum read support
+## 3. Quality control and CPI calculation
 
-### Preliminary quality control
+### Quality control
 
-Quality control is applied independently to the mother, putative
-father and child before allelic support and CPI site selection.
-
-For each individual, a site must satisfy:
+The following criteria are applied independently to each trio member:
 
 - Total coverage = N_REF + N_ALT + N_Other.
-- Other / total_count <= 0.10.
-- Total coverage >= the specified minimum coverage, if provided.
+- Total coverage > 0.
+- N_REF + N_ALT > 0.
+- N_Other / total_count <= 0.10.
+- Total coverage >= `--min_coverage`, if specified.
 
-The optional `--min_coverage` parameter sets the minimum total
-coverage required in each trio member. It must be a positive integer.
+Sites failing quality control in any trio member are excluded.
 
-For example: `--min_coverage 1000`.
+The default value of `--min_coverage` is NULL. If specified, it must be a positive integer.
 
-A site is excluded from the entire trio if any of the three
-individuals fails the preliminary quality control.
+### Genotype assignment
 
-By default, `--min_coverage` is NULL and no additional minimum
-coverage threshold is applied.
+Genotypes are assigned based on the REF allele proportion:
 
-This parameter is independent of `--min_child_reads` and applies
-to both SNP and DNP analyses.
+$$
+r=\frac{N_{REF}}{N_{REF}+N_{ALT}}
+$$
 
-### Child allelic support
+| Genotype | REF allele proportion |
+|---|---|
+| Homozygous REF | r >= 0.90 |
+| Heterozygous | 0.40 <= r <= 0.60 |
+| Homozygous ALT | r <= 0.10 |
 
-`--min_child_reads` sets the minimum support for each called allele in the child. The default is `2`.
+Sites with unassigned genotypes are excluded.
 
-- A heterozygous child requires at least two reads for each allele.
-- A homozygous child requires at least two reads for the called allele.
+### Paternity Index
 
-For a different threshold, use, for example:
+| Paternal genotype | PI |
+|---|---|
+| Compatible homozygous | 1/f |
+| Heterozygous | 0.5/f |
+| Incompatible homozygous | epsilon/f |
 
-```bash
---min_child_reads 5
-```
+Here, f is the population frequency of the obligatory paternal allele and epsilon is the mismatch probability parameter.
+
+For heterozygous mother-child combinations:
+
+$$
+PI=\frac{1}{f_{REF}+f_{ALT}}
+$$
+
+Population frequencies are used as provided.
+
+| Parameter | Default |
+|---|---|
+| `--mismatch_probability_snp` | 0.001 |
+| `--mismatch_probability_dnp` | 0.0000892303778101497 |
+
+These parameters are mismatch weights, not validated biological mutation rates.
+
+### Combined Paternity Index
+
+A single CPI is calculated per trio, assuming marker independence.
+
+$$
+CPI=\prod_{i=1}^{n}PI_i
+$$
+
+$$
+\log_{10}(CPI)=\sum_{i=1}^{n}\log_{10}(PI_i)
+$$
 
 ## 4. Run the analysis
 
@@ -90,9 +120,7 @@ Rscript Postnatal_CPI.R \
   --father_prefix Father \
   --child_prefix Child \
   --markers examples/inputs/DNP/markers.txt \
-  --popfreq examples/inputs/DNP/population_frequencies.txt \
-  --site_selection both \
-  --min_child_reads 2
+  --popfreq examples/inputs/DNP/population_frequencies.txt
 ```
 
 ### SNP example
@@ -106,9 +134,7 @@ Rscript Postnatal_CPI.R \
   --father_prefix Father \
   --child_prefix Child \
   --markers examples/inputs/SNP/markers.txt \
-  --popfreq examples/inputs/SNP/population_frequencies.txt \
-  --site_selection both \
-  --min_child_reads 2
+  --popfreq examples/inputs/SNP/population_frequencies.txt
 ```
 
 In both examples, `--trios M1:F1:C1` identifies the samples in the order **mother:father:child**.
@@ -131,27 +157,22 @@ To analyse multiple trios, separate them with commas:
 
 Omit `--markers` to consider all eligible sites in the calling outputs. Population frequencies are still required for sites contributing to the CPI.
 
-Mismatch constants can be changed with `--err_const_snp` or `--err_const_dnp`, using the same options and defaults described in the [cfDNA CPI documentation](../CPI_from_cffDNA).
+The site selection, minimum coverage and mismatch probability parameters can be specified independently.
 
 ## 5. Read the results
 
 | Output | Contents |
 |---|---|
-| `Summary_Postnatal_CPI.txt` | Tab-separated results for each trio and selected analysis |
-| `plots/` | One PDF per trio and selection |
-| `All_CPIplots.pdf` | All plots in one PDF |
+| `Summary_Postnatal_CPI.txt` | One CPI result per trio |
+| `<trio>_sites.txt` | Site-level results |
 
-Start with `Summary_Postnatal_CPI.txt`. It reports the number of sites, matching and mismatching sites, CPI, log₁₀(CPI), and the settings used.
+The summary reports the number of sites for each genotype combination, matching and mismatching sites, sites without an obligatory paternal allele, maternal incompatibilities, CPI, log10(CPI), and the settings used.
 
-The `Min_coverage` column reports the configured minimum coverage
-per trio member (`NA` when not specified). The `Min_child_reads`
-column reports the independent child allelic support threshold.
+The site-level output reports genotypes, quality control, site selection, paternity status and PI values.
+
+`Min_coverage` is reported as `NA` when not specified.
 
 When no eligible sites remain, CPI and log10(CPI) are reported as `NA`.
-
-With `--site_selection both`, each trio has two rows: one for `heterozygous_child_sites` and one for `all_compatible_sites`.
-
-The plots show how log₁₀(CPI) changes as the minimum support for the obligatory paternal allele in the child increases. The red line and point mark the result at the configured minimum support. Matching and mismatching site counts are shown on the right axis.
 
 Example results are available in `examples/outputs/`.
 
