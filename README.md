@@ -86,7 +86,7 @@ Each module can be executed independently.
 
 Module-specific requirements, input formats, parameters, execution commands and examples are provided in the corresponding directories.
 
-DNP calling is performed using [DNPcall](https://github.com/lpistacchia/DNPcall).
+DNP calling is performed using [DNPcall](https://github.com/fravasini/DNPcall).
 
 ## License
 
