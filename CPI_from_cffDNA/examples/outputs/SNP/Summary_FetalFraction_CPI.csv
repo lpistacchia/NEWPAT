@@ -1,2 +1,2 @@
 "Pair","N_sites_mother","N_sites_father","Median_fetal_fraction_raw","Median_fetal_fraction_percent","Max_logCPI","Min_logCPI","Median_logCPI","Mean_logCPI","CPI_medianFF","Include_homozygous_child","Min_coverage","Max_other_fraction","N_sites_HET_child","N_sites_HOM_child","Matching_HET_child","Mismatching_HET_child","Matching_HOM_child","Mismatching_HOM_child","Log10_CPI_HET_child","Log10_CPI_HOM_child","Error_constant","Min_fetal_reads","Min_fetal_percent"
-"MotherA1-FatherA1_SNPs",39,39,0.0015,0.15,4.899,-52.763,1.318,1.474,-15.867,FALSE,NA,0.1,20,0,10,10,0,0,-15.867,0,0.001,2,NA
+"MotherA1-FatherA1_SNPs",10,10,0.001,0.1,1.84,-13.051,0.627,0.989,-8.744,FALSE,NA,0.1,8,0,3,5,0,0,-8.744,0,0.001,2,NA
