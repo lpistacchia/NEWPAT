@@ -1,2 +1,2 @@
 Sample	N_A_original	N_A_sites	N_X_original	N_X_sites	N_Y_sites	N_Y_covered_sites	N_Y_sites_used	Fetal_reads_A	Fetal_reads_X	Reads_Y	MFF_A	MFF_X	MFF_Y	Ratio_A	Ratio_B	Ratio_C	Fetal_sex	Max_other_fraction	Maternal_hom_threshold	Include_zero_coverage_Y	Min_fetal_reads	Min_fetal_percent	A_threshold	B_female_max	B_male_min	C_female_max	C_male_min
-Male_autosomes	20	16	8	4	10	10	10	320	10	300	20	2.5	30	0.125	1.5	12	M	0.1	0.9	TRUE	2	NA	0.5	0.1	1	0.1	2
+Male_fetus_autosomes	20	16	8	4	10	10	10	320	10	300	20	2.5	30	0.125	1.5	12	M	0.1	0.9	TRUE	2	NA	0.5	0.1	1	0.1	2
