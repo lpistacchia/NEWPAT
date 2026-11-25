@@ -1,0 +1,5 @@
+chr	pos1	pos2	REF	ALT	N_REF	N_ALT	N_Other	total_count	ratio_Ref_mother	ratio_Other	fetal_reads	fetal_percent
+chrX	3010000	3010001	GA	TT	998	2	0	1000	0.998	0	2	0.2
+chrX	3020000	3020001	GA	TT	997	3	0	1000	0.997	0	3	0.3
+chrX	3030000	3030001	GA	TT	2	998	0	1000	0.002	0	2	0.2
+chrX	3040000	3040001	GA	TT	3	997	0	1000	0.003	0	3	0.3

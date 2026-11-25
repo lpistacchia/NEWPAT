@@ -1,0 +1,2 @@
+examples/inputs/Male_control_1_X.txt
+examples/inputs/Male_control_2_X.txt

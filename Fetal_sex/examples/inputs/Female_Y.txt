@@ -1,0 +1,11 @@
+chr	pos	REF	ALT	N_REF	N_ALT	N_Other	total_count
+chrY	3010000	A	G	0	0	0	0
+chrY	3020000	A	G	0	0	0	0
+chrY	3030000	A	G	0	0	0	0
+chrY	3040000	A	G	0	0	0	0
+chrY	3050000	A	G	0	0	0	0
+chrY	3060000	A	G	0	0	0	0
+chrY	3070000	A	G	0	0	0	0
+chrY	3080000	A	G	0	0	0	0
+chrY	3090000	A	G	0	0	0	0
+chrY	3100000	A	G	0	0	0	0
