@@ -36,7 +36,38 @@ parser$add_argument("--min_fetal_percent",
                     type="double", default=NULL,
                     help="Minimum fetal-read percentage; default NULL")
 
+parser$add_argument("--include_homozygous_child",
+                    choices=c("TRUE", "FALSE"), default="FALSE")
+
+parser$add_argument("--min_coverage",
+                    type="integer", default=NULL,
+                    help="Minimum total coverage (REF + ALT + Other) for mother and father")
+parser$add_argument("--max_other_fraction",
+                    type="double", default=0.10,
+                    help="Maximum Other fraction for mother and father")
+
 args <- parser$parse_args()
+
+include_homozygous_child <- args$include_homozygous_child == "TRUE"
+min_coverage <- args$min_coverage
+max_other_fraction <- args$max_other_fraction
+
+if (!is.null(min_coverage)) {
+  if (is.na(min_coverage) || min_coverage < 1L) {
+    stop("--min_coverage must be positive")
+  }
+}
+
+if (!is.finite(max_other_fraction) ||
+    max_other_fraction < 0 ||
+    max_other_fraction > 1) {
+  stop("--max_other_fraction must be between 0 and 1")
+}
+
+message("Include homozygous child sites: ", include_homozygous_child)
+message("Minimum total coverage: ",
+        if (is.null(min_coverage)) "NULL" else min_coverage)
+message("Maximum Other fraction: ", max_other_fraction)
 
 min_fetal_reads <- args$min_fetal_reads
 min_fetal_percent <- args$min_fetal_percent
@@ -292,56 +323,146 @@ compute_madre_info <- function(madre_df) {
 
 ## Compute CPI across minor-allele read thresholds.
 run_CPI_iteration <- function(madre, padre, err_const) {
+
+  # Original HET child sites
   madre_info <- compute_madre_info(madre)
-  max_fetal <- suppressWarnings(max(madre_info$fetal_reads, na.rm=TRUE))
-  if (!is.finite(max_fetal) || max_fetal < curve_start)
-    return(list(results=data.frame(), madre_info=madre_info))
+
+  # Optional HOM child sites
+  madre_hom <- madre %>%
+    dplyr::filter(
+      (Ref_mother > 0 & Alt_mother == 0) |
+      (Alt_mother > 0 & Ref_mother == 0)
+    )
+
+  if (!include_homozygous_child) {
+    madre_hom <- madre_hom[0, , drop=FALSE]
+  }
+
+  # Calculate PI using the inferred paternal allele
+  calculate_PI <- function(mother_sites, child_type) {
+
+    mother_sites %>%
+      dplyr::mutate(
+        Paternal_allele = if (child_type == "HET") {
+          ifelse(ratio_Ref_mother >= 0.9, "ALT", "REF")
+        } else {
+          ifelse(ratio_Ref_mother >= 0.9, "REF", "ALT")
+        }
+      ) %>%
+      dplyr::inner_join(padre, by=site_columns) %>%
+      dplyr::inner_join(PopFreqDNPs, by=site_columns) %>%
+      dplyr::mutate(
+        Allele_frequency = ifelse(
+          Paternal_allele == "REF", Ref_f.pop, Alt_f.pop
+        ),
+
+        Father_genotype = dplyr::case_when(
+          ratio_Ref_father >= 0.9 ~ "REF",
+          ratio_Ref_father <= 0.1 ~ "ALT",
+          dplyr::between(ratio_Ref_father, 0.4, 0.6) ~ "HET",
+          TRUE ~ NA_character_
+        ),
+
+        Mismatch = Father_genotype != "HET" &
+                   Father_genotype != Paternal_allele,
+
+        Paternity_Index = dplyr::case_when(
+          Father_genotype == Paternal_allele ~
+            1 / Allele_frequency,
+
+          Father_genotype == "HET" ~
+            0.5 / Allele_frequency,
+
+          Mismatch ~ err_const / Allele_frequency,
+
+          TRUE ~ NA_real_
+        )
+      ) %>%
+      dplyr::filter(
+        is.finite(Paternity_Index),
+        Paternity_Index > 0
+      )
+  }
+
+  # HOM contribution is fixed across iterations
+  PI_hom <- calculate_PI(madre_hom, "HOM")
+
+  log_hom <- sum(log10(PI_hom$Paternity_Index))
+  mismatch_hom <- sum(PI_hom$Mismatch)
+  matching_hom <- nrow(PI_hom) - mismatch_hom
+
+  max_fetal <- suppressWarnings(
+    max(madre_info$fetal_reads, na.rm=TRUE)
+  )
+
+  # No HET sites: no median-based prenatal CPI
+  if (!is.finite(max_fetal) || max_fetal < curve_start) {
+    return(list(
+      results=data.frame(),
+      madre_info=madre_info,
+      madre_hom=madre_hom,
+      PI_hom=PI_hom,
+      log_hom=log_hom
+    ))
+  }
 
   results <- data.frame()
+
   for (i in seq.int(curve_start, max_fetal)) {
-    madre_filt <- madre_info %>% dplyr::filter(fetal_reads >= i)
 
-    df_merged <- dplyr::inner_join(madre_filt, padre, by=site_columns) %>%
-      dplyr::mutate(threshold = dplyr::case_when(
-        ratio_Ref_mother >= 0.9 & Alt_father >= 0 ~ "informative",
-        ratio_Ref_mother <= 0.1 & Ref_father >= 0 ~ "informative",
-        TRUE ~ "non informative"
-      )) %>%
-      dplyr::inner_join(PopFreqDNPs, by=site_columns) %>%
-      dplyr::mutate(dplyr::across(c(Ref_f.pop,Alt_f.pop), as.numeric))
+    madre_filt <- madre_info %>%
+      dplyr::filter(fetal_reads >= i)
 
-    PI <- df_merged %>% dplyr::filter(threshold=="informative") %>%
-      dplyr::mutate(Paternity_Index = dplyr::case_when(
-        ratio_Ref_mother >= 0.9 & ratio_Ref_father <= 0.1 ~ 1/Alt_f.pop,
-        ratio_Ref_mother >= 0.9 & between(ratio_Ref_father,0.4,0.6) ~ 0.5/Alt_f.pop,
-        ratio_Ref_mother >= 0.9 & ratio_Ref_father >= 0.9 ~ err_const/Alt_f.pop,
-        ratio_Ref_mother <= 0.1 & ratio_Ref_father <= 0.1 ~ err_const/Ref_f.pop,
-        ratio_Ref_mother <= 0.1 & between(ratio_Ref_father,0.4,0.6) ~ 0.5/Ref_f.pop,
-        ratio_Ref_mother <= 0.1 & ratio_Ref_father >= 0.9 ~ 1/Ref_f.pop,
-        TRUE ~ NA_real_
-      )) %>% tidyr::drop_na()
+    PI_het <- calculate_PI(madre_filt, "HET")
 
-    CPI_val <- ifelse(nrow(PI)>0, prod(PI$Paternity_Index, na.rm=TRUE), NA_real_)
-    logCPI  <- ifelse(!is.na(CPI_val) & CPI_val>0, log10(CPI_val), NA_real_)
+    log_het <- sum(log10(PI_het$Paternity_Index))
 
-    mismatch_summary <- df_merged %>% dplyr::filter(threshold=="informative") %>%
-      summarise(
-        Mismatch = sum((ratio_Ref_mother>=0.9 & ratio_Ref_father>=0.9) |
-                         (ratio_Ref_mother<=0.1 & ratio_Ref_father<=0.1)),
-        NotMismatch = n() - Mismatch
-      )
+    n_total <- nrow(PI_het) + nrow(PI_hom)
+
+    logCPI <- if (n_total > 0) {
+      log_het + log_hom
+    } else {
+      NA_real_
+    }
+
+    CPI_val <- 10^logCPI
+
+    mismatch_het <- sum(PI_het$Mismatch)
+    matching_het <- nrow(PI_het) - mismatch_het
 
     results <- rbind(results, data.frame(
       Iteration=i,
-      InfSites_mother=nrow(madre_filt),
-      InfSites_father=nrow(PI),
+
+      InfSites_mother=nrow(madre_filt) + nrow(madre_hom),
+      InfSites_father=n_total,
+
       CPI=CPI_val,
       log_CPI=logCPI,
-      Mismatch=mismatch_summary$Mismatch,
-      NotMismatch=mismatch_summary$NotMismatch
+
+      Mismatch=mismatch_het + mismatch_hom,
+      NotMismatch=matching_het + matching_hom,
+
+      N_sites_HET_child=nrow(PI_het),
+      N_sites_HOM_child=nrow(PI_hom),
+
+      Matching_HET_child=matching_het,
+      Mismatching_HET_child=mismatch_het,
+
+      Matching_HOM_child=matching_hom,
+      Mismatching_HOM_child=mismatch_hom,
+
+      Log10_CPI_HET_child=log_het,
+      Log10_CPI_HOM_child=log_hom
     ))
   }
-  return(list(results=results, madre_info=madre_info))
+
+  return(list(
+    results=results,
+    madre_info=madre_info,
+    madre_hom=madre_hom,
+    PI_hom=PI_hom,
+    log_hom=log_hom
+  ))
 }
 
 ## get logCPI at iteration closest to target (median fetal reads)
@@ -492,12 +613,16 @@ for (i in seq_len(nrow(coppie))) {
       total_count = total_count
     )
 
-  madre <- madre %>% dplyr::filter(Error_mother/total_count <= 0.10)
+  madre <- madre %>% dplyr::filter(total_count > 0,
+      Error_mother/total_count <= max_other_fraction,
+      total_count >= (if (is.null(min_coverage)) 0 else min_coverage))
   padre <- padre %>%
     dplyr::mutate(
       Ref_father = ifelse(ratio_Ref_father < 0.1, 0, Ref_father),
       Alt_father = ifelse(ratio_Ref_father > 0.9, 0, Alt_father)
-    ) %>% dplyr::filter(Error_father/total_count <= 0.10)
+    ) %>% dplyr::filter(total_count > 0,
+      Error_father/total_count <= max_other_fraction,
+      total_count >= (if (is.null(min_coverage)) 0 else min_coverage))
 
 
   out <- run_CPI_iteration(madre, padre, err_const)
@@ -505,6 +630,28 @@ for (i in seq_len(nrow(coppie))) {
   info <- out$madre_info
   target_i <- round(stats::median(info$fetal_reads, na.rm=TRUE))
   cpi_at_med <- closest_logCPI(res, target_i)
+
+  median_row <- if (nrow(res) && is.finite(target_i)) {
+    res[which.min(abs(res$Iteration - target_i)), , drop=FALSE]
+  } else {
+    NULL
+  }
+
+  median_value <- function(column) {
+    if (is.null(median_row)) NA_real_ else median_row[[column]]
+  }
+
+  write.csv(
+    res,
+    file.path(args$out_dir, paste0(pair_name, "_CPI_iterations.csv")),
+    row.names=FALSE
+  )
+
+  write.table(
+    out$PI_hom,
+    file.path(args$out_dir, paste0(pair_name, "_HOM_child_sites.txt")),
+    sep="\t", quote=FALSE, row.names=FALSE
+  )
   median_fetal_fraction <- stats::median(
     2 * info$fetal_reads / (info$Ref_mother + info$Alt_mother),
     na.rm=TRUE
@@ -529,6 +676,25 @@ for (i in seq_len(nrow(coppie))) {
     Median_logCPI = if (length(values)) round(stats::median(values), 3) else NA_real_,
     Mean_logCPI = if (length(values)) round(mean(values), 3) else NA_real_,
     CPI_medianFF = round(cpi_at_med, 3),
+
+    Include_homozygous_child = include_homozygous_child,
+    Min_coverage = if (is.null(min_coverage)) NA_integer_ else min_coverage,
+    Max_other_fraction = max_other_fraction,
+
+    N_sites_HET_child = if (nrow(info) == 0) 0L else median_value("N_sites_HET_child"),
+    N_sites_HOM_child = nrow(out$PI_hom),
+
+    Matching_HET_child = if (nrow(info) == 0) 0L else median_value("Matching_HET_child"),
+    Mismatching_HET_child = if (nrow(info) == 0) 0L else median_value("Mismatching_HET_child"),
+
+    Matching_HOM_child = sum(!out$PI_hom$Mismatch),
+    Mismatching_HOM_child = sum(out$PI_hom$Mismatch),
+
+    Log10_CPI_HET_child = round(
+      median_value("Log10_CPI_HET_child"), 3
+    ),
+
+    Log10_CPI_HOM_child = round(out$log_hom, 3),
     Error_constant = err_const,
     Min_fetal_reads = if (is.null(min_fetal_reads))
       NA_integer_ else min_fetal_reads,

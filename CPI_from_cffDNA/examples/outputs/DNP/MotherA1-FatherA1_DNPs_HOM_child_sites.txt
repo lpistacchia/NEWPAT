@@ -1,0 +1,1 @@
+chr	pos1	pos2	REF.x	ALT.x	Ref_mother	Alt_mother	Error_mother	ratio_Ref_mother	total_count.x	Paternal_allele	REF.y	ALT.y	Ref_father	Alt_father	Error_father	ratio_Ref_father	total_count.y	Ref_f.pop	Alt_f.pop	Allele_frequency	Father_genotype	Mismatch	Paternity_Index

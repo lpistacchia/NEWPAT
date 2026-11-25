@@ -1,2 +1,2 @@
-"Pair","N_sites_mother","N_sites_father","Median_fetal_fraction_raw","Median_fetal_fraction_percent","Max_logCPI","Min_logCPI","Median_logCPI","Mean_logCPI","CPI_medianFF","Error_constant"
-"MotherA1-FatherA1_DNPs",12,12,0.0268,2.68,6.089,-0.227,2.069,2.696,3.128,8.92303778101497e-05
+"Pair","N_sites_mother","N_sites_father","Median_fetal_fraction_raw","Median_fetal_fraction_percent","Max_logCPI","Min_logCPI","Median_logCPI","Mean_logCPI","CPI_medianFF","Include_homozygous_child","Min_coverage","Max_other_fraction","N_sites_HET_child","N_sites_HOM_child","Matching_HET_child","Mismatching_HET_child","Matching_HOM_child","Mismatching_HOM_child","Log10_CPI_HET_child","Log10_CPI_HOM_child","Error_constant","Min_fetal_reads","Min_fetal_percent"
+"MotherA1-FatherA1_DNPs",12,12,0.0268,2.68,6.089,-0.227,2.069,2.696,3.128,FALSE,NA,0.1,6,0,6,0,0,0,3.128,0,8.92303778101497e-05,2,NA

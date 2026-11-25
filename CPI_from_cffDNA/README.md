@@ -80,12 +80,38 @@ This example analyses `MotherA1.txt` with `FatherA1.txt` and `MotherA2.txt` with
 | `--father_prefix` | Filename prefix preceding the paternal identifier |
 | `--popfreq` | Population-frequency table |
 | `--markers` | Optional SNP or DNP marker list |
+| `--min_coverage` | Minimum total coverage (REF + ALT + Other) for both samples; default: NULL |
+| `--max_other_fraction` | Maximum fraction of Other reads; default: 0.10 |
+| `--include_homozygous_child` | Include presumed homozygous fetal sites; default: FALSE |
 | `--min_fetal_reads` | Minimum absolute minor-allele read support; defaults to `2` when neither filter is specified |
 | `--min_fetal_percent` | Minimum minor-allele read percentage per site; optional (e.g. `0.25` means 0.25%) |
 | `--err_const_snp` | SNP mismatch constant; default: `0.001` |
 | `--err_const_dnp` | DNP mismatch constant; default: `0.0000892303778101497` |
 
 The marker type is detected automatically, and the script checks coordinate and allele consistency.
+
+### Quality control
+
+Maternal and paternal calling outputs are filtered independently before informative-site selection.
+
+Total coverage is calculated as:
+
+`Coverage = N_REF + N_ALT + N_Other`
+
+The fraction of Other reads is calculated as:
+
+`Other_fraction = N_Other / Coverage`
+
+Sites with zero total coverage are excluded.
+
+Two configurable filters are available:
+
+- `--min_coverage`: minimum total coverage in each sample. No additional minimum coverage is imposed by default.
+- `--max_other_fraction`: maximum fraction of Other reads in each sample (default: 0.10).
+
+Both samples must satisfy these filters for a site to contribute to the CPI.
+
+Fetal-fraction estimation uses filtered maternal sites independently of paternal coverage.
 
 ### Minimum fetal read support
 
@@ -142,9 +168,49 @@ the curve starts at one read.
 
 The fetal-fraction and CPI formulas remain unchanged.
 
+### Optional inclusion of homozygous fetal sites
+
+By default, CPI calculation includes only putative heterozygous fetal sites at maternal homozygous loci.
+
+The option `--include_homozygous_child TRUE` additionally includes presumed homozygous fetal sites.
+
+These sites are selected when:
+
+- Only REF or only ALT reads are observed among the expected alleles in maternal cfDNA.
+- Both maternal and paternal samples satisfy the general quality-control filters.
+- The paternal genotype can be classified and population allele frequencies are available.
+
+Sites with non-zero minor-allele support below the fetal-read thresholds are excluded.
+
+Presumed homozygous fetal sites do not contribute to fetal-fraction estimation or to the median fetal-read threshold. Their CPI contribution remains constant across iterations.
+
+The absence of non-maternal allele reads does not prove fetal homozygosity. This optional mode is experimental and requires biological validation, particularly regarding allelic dropout and low fetal fractions.
+
+### Paternity Index calculation
+
+Let f be the population frequency of the inferred paternal allele and epsilon the marker-specific mismatch constant.
+
+| Putative-father genotype | PI |
+|---|---|
+| Homozygous for the inferred paternal allele | 1 / f |
+| Heterozygous | 0.5 / f |
+| Homozygous for the opposite allele | epsilon / f |
+
+The inferred paternal allele is the non-maternal allele at heterozygous fetal sites and the maternal allele at presumed homozygous fetal sites.
+
+Unclassified paternal genotypes are excluded from CPI calculation and matching and mismatching counts.
+
+The CPI is calculated as the product of individual PIs.
+
+When homozygous fetal sites are included:
+
+`log10(CPI_total) = log10(CPI_HET) + log10(CPI_HOM)`
+
+If no eligible maternal HET-child candidate sites are available, fetal fraction and median-based CPI are reported as NA. The HOM contribution is reported separately.
+
 ### Mismatch constants
 
-At informative sites where the putative father is homozygous for the maternal allele, the PI uses a mismatch constant in place of zero.
+At informative sites where the putative father is homozygous for the allele opposite to the inferred paternal allele, the PI uses a mismatch constant in place of zero. Its applicability to presumed homozygous fetal sites requires further validation.
 
 The script selects the SNP or DNP constant automatically. To change it, add the corresponding option, for example:
 
@@ -163,16 +229,36 @@ Values are proportions, not percentages. The defaults are specific to this workf
 | Column | Description |
 |---|---|
 | `Pair` | Pair identifier and marker type |
-| `N_sites_mother` | Maternal-informative sites retained |
-| `N_sites_father` | Retained sites also present in the filtered paternal table |
+| `N_sites_mother` | Maternal HET-child candidate sites retained after initial filtering |
+| `N_sites_father` | Initial HET-child candidate sites also present in the filtered paternal table |
 | `Median_fetal_fraction_raw` | Median site-level fetal-fraction estimate |
 | `Median_fetal_fraction_percent` | Median fetal-fraction estimate as a percentage |
 | `Max_logCPI`, `Min_logCPI` | Maximum and minimum log₁₀(CPI) across read thresholds |
 | `Median_logCPI`, `Mean_logCPI` | Median and mean log₁₀(CPI) across read thresholds |
 | `CPI_medianFF` | log₁₀(CPI) at the threshold nearest the rounded median minor-allele read count |
+| `Include_homozygous_child` | Whether the optional HOM-child mode is enabled |
+| `Min_coverage` | Minimum total coverage; NA if inactive |
+| `Max_other_fraction` | Maximum allowed fraction of Other reads |
+| `N_sites_HET_child` | HET-child sites contributing to CPI at the median read threshold |
+| `N_sites_HOM_child` | Presumed HOM-child sites contributing to CPI |
+| `Matching_HET_child` | Matching HET-child sites at the median read threshold |
+| `Mismatching_HET_child` | Mismatching HET-child sites at the median read threshold |
+| `Matching_HOM_child` | Matching HOM-child sites |
+| `Mismatching_HOM_child` | Mismatching HOM-child sites |
+| `Log10_CPI_HET_child` | HET-child log10(CPI) contribution at the median read threshold |
+| `Log10_CPI_HOM_child` | HOM-child log10(CPI) contribution |
 | `Error_constant` | Mismatch constant used |
 | `Min_fetal_reads` | Absolute read threshold used; NA if inactive |
 | `Min_fetal_percent` | Percentage threshold used; NA if inactive |
+
+### Additional output tables
+
+For each maternal-paternal pair:
+
+- `*_CPI_iterations.csv`: CPI, log10(CPI), site counts, matching and mismatching counts, and separate HET and HOM contributions across read thresholds.
+- `*_HOM_child_sites.txt`: presumed homozygous fetal sites contributing to CPI, including allele counts, population frequencies, paternal genotype, mismatch status and individual PI values.
+
+The HOM-child table contains only column headers when the optional mode is disabled.
 
 ### Plots
 
